@@ -1,25 +1,36 @@
 <!doctype html>
 <html lang="zh">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>ASVAB 模拟题（整套）</title>
-  <meta name="description" content="选择科目即可做整套 ASVAB 模拟题。支持多套题、只看错题、导出错题 JSON。">
-  <link rel="stylesheet" href="styles.css">
-  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .btn-primary{background:linear-gradient(135deg,#06b6d4,#3b82f6);color:#fff;border:0;padding:.7rem 1.2rem;border-radius:.8rem;box-shadow:0 6px 20px rgba(59,130,246,.25),0 2px 6px rgba(6,182,212,.35);transition:transform .08s ease,filter .2s ease}
+    .btn-primary:hover{transform:translateY(-1px);filter:brightness(1.05)}
+    .btn-primary:active{transform:translateY(0);filter:brightness(.98)}
+    .btn-primary[disabled]{opacity:.65;cursor:not-allowed;box-shadow:none}
+    .btn-primary.is-loading{position:relative;color:transparent}
+    .btn-primary.is-loading::after{content:"";position:absolute;inset:0;margin:auto;width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,255,255,.6);border-top-color:transparent;animation:spin .8s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .wrap{max-width:980px;margin:0 auto;padding:24px}
+    .card{background:#0f172a80;border:1px solid #1f2937;border-radius:14px;padding:16px;margin:12px 0}
+    body{background:#0b1220;color:#e5e7eb;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial}
+    h1{font-size:40px;margin:28px 0}
+    .small{opacity:.8;font-size:14px}
+    a,select,button{font:inherit}
+  </style>
 </head>
 <body>
-  <header>
-    <div class="wrap" style="display:flex;align-items:center;justify-content:space-between;">
-      <div style="font-weight:600;"><a href="/" style="color:#e5e7eb;text-decoration:none;">ASVAB 学习指南</a></div>
-      <nav><a href="/">首页</a><a href="about.html">关于</a></nav>
-    </div>
+  <header class="wrap" style="display:flex;justify-content:space-between;align-items:center;">
+    <div style="font-weight:700">ASVAB 学习指南</div>
+    <nav><a href="/" style="color:#cbd5e1;text-decoration:none;margin-right:16px">首页</a><a href="about.html" style="color:#cbd5e1;text-decoration:none">关于</a></nav>
   </header>
 
   <main class="wrap">
     <h1>ASVAB 模拟题（整套）</h1>
 
-    <div class="card" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+    <div class="card" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
       <label>科目：
         <select id="module">
           <option value="AR">AR 算术推理</option>
@@ -28,185 +39,125 @@
           <option value="GS">GS 自然科学</option>
         </select>
       </label>
-      <button id="load" class="btn btn-primary" onclick="onLoadClick()">加载整套</button>
-      <div id="status" class="small" style="margin-top:8px;color:#93c5fd;"></div>
-
-
-      <span id="currentSet" class="small" style="margin-left:auto;"></span>
-      <button id="switchSet" class="btn" style="display:none;">更多套卷</button>
+      <!-- 兜底：onclick 必定生效 -->
+      <button id="load" class="btn-primary" onclick="onLoadClick()">加载整套</button>
+      <span id="currentSet" class="small" style="margin-left:auto"></span>
     </div>
+
+    <!-- 可见状态栏 -->
+    <div id="status" class="wrap small" style="padding-top:0;color:#93c5fd"></div>
 
     <div id="quiz"></div>
 
-    <div class="card" id="actions" style="display:none;gap:12px;align-items:center;margin-top:16px;">
-      <button id="submit" class="btn">提交答案</button>
-      <button id="toggleWrong" class="btn" style="display:none;">只看错题</button>
-      <button id="exportWrong" class="btn" style="display:none;">导出错题 JSON</button>
-      <button id="retry" class="btn" style="display:none;">重做本套</button>
+    <div class="card" id="actions" style="display:none;gap:12px;align-items:center">
+      <button id="submit" class="btn-primary">提交答案</button>
+      <button id="toggleWrong" class="btn-primary" style="display:none">只看错题</button>
+      <button id="exportWrong" class="btn-primary" style="display:none">导出错题 JSON</button>
+      <button id="retry" class="btn-primary" style="display:none" onclick="renderQuiz()">重做本套</button>
     </div>
 
-    <div class="card" id="result" style="display:none;margin-top:16px;"></div>
+    <div class="card" id="result" style="display:none"></div>
   </main>
 
-  <footer>
-    <p>© <span id="y"></span> ASVAB 学习指南</p>
-  </footer>
-
   <script>
-    /* ========= 基础工具 ========= */
-    document.getElementById('y')?.textContent = new Date().getFullYear();
-    let MANIFEST=null, setsOfModule=[], activeSet=null, questions=[], wrongList=[], onlyWrong=false;
+    // ====== 状态栏 ======
+    function setStatus(msg){ document.getElementById('status').textContent = msg || '' }
 
-    // 简单的状态输出
-    function setStatus(msg) {
-      const el = document.getElementById('status');
-      if (el) el.textContent = msg || '';
-    }
+    // ====== 全局状态 ======
+    let activeSet=null, setsOfModule=[], questions=[], wrongList=[], onlyWrong=false;
 
-    // 带可见状态与错误提示的加载函数（挂到全局，确保 onclick 可用）
-    async function onLoadClick() {
-      const btn = document.getElementById('load');
-      const mod = document.getElementById('module').value;
+    // ====== 载入流程（manifest -> 套卷 JSON -> 渲染） ======
+    async function onLoadClick(){
+      const btn=document.getElementById('load');
+      const mod=document.getElementById('module').value;
 
-      btn.disabled = true;
-      btn.classList.add('is-loading');
-      btn.textContent = '加载中…';
-      setStatus('开始加载清单 manifest.json …');
+      btn.disabled=true; btn.classList.add('is-loading'); btn.textContent='加载中…';
+      setStatus('开始加载清单：/exams/manifest.json');
 
-      try {
-        // 1) 先读 manifest
-        const mRes = await fetch('exams/manifest.json?v=1', { cache: 'no-store' });
-        if (!mRes.ok) throw new Error(`manifest.json 加载失败：HTTP ${mRes.status}`);
-        const manifest = await mRes.json();
-        if (!manifest[mod] || !manifest[mod].length) {
+      try{
+        // 1) 读 manifest
+        const m = await fetch('exams/manifest.json?v=1',{cache:'no-store'});
+        if(!m.ok) throw new Error('manifest.json 加载失败：HTTP '+m.status);
+        const manifest = await m.json();
+
+        if(!manifest[mod] || !manifest[mod].length){
           throw new Error(`manifest 中没有科目 ${mod} 的套卷条目`);
         }
-
-        // 2) 取该科目的第1套（默认）
-        const firstSet = manifest[mod][0];
-        setStatus(`找到套卷：${firstSet.title}，开始加载 ${firstSet.file} …`);
-
-        // 3) 拉题
-        const sRes = await fetch(`${firstSet.file}?v=1`, { cache: 'no-store' });
-        if (!sRes.ok) throw new Error(`套卷文件加载失败：HTTP ${sRes.status} (${firstSet.file})`);
-        const data = await sRes.json();
-
-        // 4) 渲染
-        activeSet = firstSet;
         setsOfModule = manifest[mod];
-        questions = Array.isArray(data.questions) ? data.questions : [];
-        if (!questions.length) throw new Error('套卷文件中 questions 为空');
+        activeSet = setsOfModule[0]; // 默认第一套
+
+        setStatus(`找到套卷：${activeSet.title}，开始加载 ${activeSet.file}`);
+
+        // 2) 读套卷
+        const s = await fetch(`${activeSet.file}?v=1`,{cache:'no-store'});
+        if(!s.ok) throw new Error(`套卷文件加载失败：HTTP ${s.status}（${activeSet.file}）`);
+        const data = await s.json();
+
+        questions = Array.isArray(data.questions)? data.questions : [];
+        if(!questions.length) throw new Error('套卷文件中 questions 为空');
 
         document.getElementById('currentSet').textContent =
-          `当前套卷：${firstSet.title}（共 ${firstSet.count ?? questions.length} 题）`;
-        document.getElementById('switchSet').style.display =
-          (setsOfModule.length > 1 ? 'inline-block' : 'none');
+          `当前套卷：${activeSet.title}（共 ${activeSet.count ?? questions.length} 题）`;
 
         renderQuiz();
-        setStatus(`已加载：${firstSet.title}（${questions.length} 题）`);
-      } catch (err) {
-        console.error(err);
-        setStatus(`❌ 加载失败：${err.message}`);
-        alert(`加载失败：${err.message}\n\n请确认：\n1) exams/manifest.json 是否已提交并能在浏览器直接打开；\n2) manifest 里的 file 路径与实际文件名大小写完全一致；\n3) 强制刷新后再试（Cmd+Shift+R）。`);
-      } finally {
-        btn.disabled = false;
-        btn.classList.remove('is-loading');
-        btn.textContent = '加载整套';
+        setStatus(`✅ 已加载：${activeSet.title}（${questions.length} 题）`);
+      }catch(e){
+        console.error(e);
+        setStatus('❌ '+e.message);
+        alert('加载失败：'+e.message+'\n\n请确认路径是否与仓库一致，大小写是否一致。');
+      }finally{
+        btn.disabled=false; btn.classList.remove('is-loading'); btn.textContent='加载整套';
       }
     }
-    window.onLoadClick = onLoadClick; // 确保 onclick 能调用
+    window.onLoadClick = onLoadClick;
 
-
-    
-    async function loadManifest(){
-      if (MANIFEST) return;
-      const res = await fetch('exams/manifest.json?v=1');
-      MANIFEST = await res.json();
-    }
-    
-    async function loadSet(module, setIndex=0){
-      await loadManifest();
-      setsOfModule = MANIFEST[module] || [];
-      if (!setsOfModule.length) { alert('该科目暂无套卷'); return; }
-      activeSet = setsOfModule[Math.max(0, Math.min(setIndex, setsOfModule.length-1))];
-    
-      const curr = document.getElementById('currentSet');
-      curr.textContent = `当前套卷：${activeSet.title}（共 ${activeSet.count ?? 'N'} 题）`;
-      document.getElementById('switchSet').style.display = setsOfModule.length > 1 ? 'inline-block' : 'none';
-    
-      const res = await fetch(`${activeSet.file}?v=1`);
-      const data = await res.json();
-      questions = data.questions || [];
-      renderQuiz();
-    }
-    
-    /* ========= 渲染 ========= */
+    // ====== 渲染题目 ======
     function renderQuiz(){
       const quiz = document.getElementById('quiz');
-      quiz.innerHTML = questions.map((item, idx) => {
-        const name = `q${idx}`;
-        const choices = item.choices.map((t,i) => `
+      quiz.innerHTML = questions.map((it,idx)=>{
+        const name=`q${idx}`;
+        const choices = it.choices.map((t,i)=>`
           <label style="display:block;margin:6px 0;">
             <input type="radio" name="${name}" value="${i}"> ${String.fromCharCode(65+i)}. ${t}
           </label>
         `).join('');
         return `
           <div class="card" data-idx="${idx}">
-            <div style="font-weight:600;margin-bottom:6px;">${idx+1}. ${item.q}</div>
+            <div style="font-weight:600;margin-bottom:6px;">${idx+1}. ${it.q}</div>
             <div>${choices}</div>
             <div id="exp-${idx}" class="small" style="display:none;margin-top:8px;"></div>
-          </div>
-        `;
+          </div>`;
       }).join('');
-    
-      wrongList = [];
-      onlyWrong = false;
-      document.getElementById('actions').style.display = 'flex';
-      document.getElementById('result').style.display = 'none';
-      document.getElementById('toggleWrong').style.display = 'none';
-      document.getElementById('exportWrong').style.display = 'none';
-      document.getElementById('retry').style.display = 'inline-block';
+
+      wrongList=[]; onlyWrong=false;
+      document.getElementById('actions').style.display='flex';
+      document.getElementById('result').style.display='none';
+      document.getElementById('toggleWrong').style.display='none';
+      document.getElementById('exportWrong').style.display='none';
+      document.getElementById('retry').style.display='inline-block';
     }
-    
-    /* ========= 事件 ========= */
-    document.getElementById('load').addEventListener('click', async () => {
-      const mod = document.getElementById('module').value;
-      await loadSet(mod, 0);
-    });
-    
-    document.getElementById('switchSet').addEventListener('click', async () => {
-      const names = setsOfModule.map((s,i)=>`${i+1}. ${s.title}`).join('\n');
-      const pick = prompt(`共有 ${setsOfModule.length} 套：\n${names}\n\n请输入要切换到的序号（1-${setsOfModule.length}）：`);
-      if (!pick) return;
-      const idx = Number(pick) - 1;
-      if (Number.isInteger(idx) && idx>=0 && idx<setsOfModule.length) {
-        await loadSet(document.getElementById('module').value, idx);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      } else { alert('输入无效'); }
-    });
-    
-    document.getElementById('submit').addEventListener('click', () => {
-      let score = 0; wrongList = [];
-      questions.forEach((item, idx) => {
-        const chosen = document.querySelector(`input[name="q${idx}"]:checked`);
-        const exp = document.getElementById(`exp-${idx}`);
-        const user = chosen ? Number(chosen.value) : -1;
-        const ok = user === item.answer;
-        if (ok) score++; else wrongList.push({ ...item, user });
-        exp.style.display = 'block';
+
+    // ====== 判分 / 错题 / 导出 ======
+    document.getElementById('submit').addEventListener('click',()=>{
+      let score=0; wrongList=[];
+      questions.forEach((it,idx)=>{
+        const chosen=document.querySelector(`input[name="q${idx}"]:checked`);
+        const user=chosen?Number(chosen.value):-1;
+        const exp=document.getElementById(`exp-${idx}`);
+        const ok=user===it.answer;
+        if(ok) score++; else wrongList.push({...it,user});
+        exp.style.display='block';
         exp.innerHTML = ok
-          ? `✅ 正确：${String.fromCharCode(65 + item.answer)}。${item.explanation || ''}`
-          : `❌ 你的答案：${user>=0 ? String.fromCharCode(65+user) : '未作答'}；正确：${String.fromCharCode(65 + item.answer)}。${item.explanation || ''}`;
+          ? `✅ 正确：${String.fromCharCode(65+it.answer)}。${it.explanation||''}`
+          : `❌ 你的答案：${user>=0?String.fromCharCode(65+user):'未作答'}；正确：${String.fromCharCode(65+it.answer)}。${it.explanation||''}`;
       });
-    
-      const result = document.getElementById('result');
-      result.style.display = 'block';
-      result.innerHTML = `<b>得分：${score}/${questions.length}</b> · 正确率 ${(score/questions.length*100).toFixed(0)}%`;
-    
-      document.getElementById('toggleWrong').style.display = 'inline-block';
-      document.getElementById('exportWrong').style.display = wrongList.length ? 'inline-block' : 'none';
+      const r=document.getElementById('result');
+      r.style.display='block';
+      r.innerHTML=`<b>得分：${score}/${questions.length}</b> · 正确率 ${(score/questions.length*100).toFixed(0)}%`;
+      document.getElementById('toggleWrong').style.display='inline-block';
+      document.getElementById('exportWrong').style.display=wrongList.length?'inline-block':'none';
     });
-    
+
     document.getElementById('toggleWrong').addEventListener('click', () => {
       onlyWrong = !onlyWrong;
       questions.forEach((_, idx) => {
@@ -216,33 +167,15 @@
       });
       document.getElementById('toggleWrong').textContent = onlyWrong ? '显示全部' : '只看错题';
     });
-    
-    document.getElementById('exportWrong').addEventListener('click', () => {
-      const data = wrongList.map(w => ({
-        module: w.module || activeSet?.module,
-        question: w.q,
-        choices: w.choices,
-        correctIndex: w.answer,
-        userIndex: w.user ?? -1,
-        explanation: w.explanation || ''
-      }));
-      const blob = new Blob(
-        [JSON.stringify({ exportedAt: new Date().toISOString(), exam: activeSet?.title, items: data }, null, 2)],
-        { type: 'application/json' }
-      );
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `asvab_wrong_${activeSet?.id || 'set'}.json`;
-      a.click();
+
+
+    document.getElementById('exportWrong').addEventListener('click',()=>{
+      const data=wrongList.map(w=>({question:w.q,choices:w.choices,correctIndex:w.answer,userIndex:w.user??-1,explanation:w.explanation||''}));
+      const blob=new Blob([JSON.stringify({exportedAt:new Date().toISOString(),exam:activeSet?.title||'',items:data},null,2)],{type:'application/json'});
+      const url=URL.createObjectURL(blob); const a=document.createElement('a');
+      a.href=url; a.download=`ASVAB_${(activeSet?.id||'set')}_错题_${new Date().toISOString().slice(0,10)}.json`; a.click();
       URL.revokeObjectURL(url);
     });
-    
-    document.getElementById('retry').addEventListener('click', () => renderQuiz());
-    
-    /* 默认加载 AR 第1套 */
-    loadSet('AR', 0);
-    </script>
-    
+  </script>
 </body>
 </html>

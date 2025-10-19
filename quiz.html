@@ -11,7 +11,7 @@
     h1{font-size:40px;margin:28px 0}
     .small{opacity:.8;font-size:14px}
     a,select,button,input{font:inherit}
-    .btn{background:#1f2937;border:1px solid #374151;color:#e5e7eb;padding:.65rem 1rem;border-radius:.8rem}
+    .btn{background:#1f2937;border:1px solid #374151;color:#e5e7eb;padding:.65rem 1rem;border-radius:.8rem;cursor:pointer}
     .btn-primary{background:linear-gradient(135deg,#06b6d4,#3b82f6);color:#fff;border:0;padding:.7rem 1.2rem;border-radius:.8rem;box-shadow:0 6px 20px rgba(59,130,246,.25),0 2px 6px rgba(6,182,212,.35);transition:transform .08s ease,filter .2s ease;cursor:pointer}
     .btn-primary:hover{transform:translateY(-1px);filter:brightness(1.05)}
     .btn-primary:active{transform:translateY(0);filter:brightness(.98)}
@@ -19,12 +19,18 @@
     .btn-primary.is-loading{position:relative;color:transparent}
     .btn-primary.is-loading::after{content:"";position:absolute;inset:0;margin:auto;width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,255,255,.6);border-top-color:transparent;animation:spin .8s linear infinite}
     @keyframes spin{to{transform:rotate(360deg)}}
+    .brand a{color:#e5e7eb;text-decoration:none}
   </style>
 </head>
 <body>
   <header class="wrap" style="display:flex;justify-content:space-between;align-items:center;">
-    <div style="font-weight:700">ASVAB 学习指南</div>
-    <div class="small" id="whoami"></div>
+    <div class="brand" style="font-weight:700">
+      <a href="index.html">ASVAB 学习指南</a>
+    </div>
+    <div class="small" style="display:flex;gap:12px;align-items:center">
+      <a href="index.html" class="btn" style="padding:6px 10px">🏠 返回首页</a>
+      <span id="whoami"></span>
+    </div>
   </header>
 
   <main class="wrap">
@@ -40,9 +46,14 @@
         </select>
       </label>
 
+      <label>限时：
+        <input id="limitMin" type="number" value="20" min="1" style="width:70px"> 分钟
+      </label>
+
       <button id="load" class="btn-primary" onclick="onLoadClick()">加载整套</button>
 
       <span id="currentSet" class="small" style="margin-left:auto"></span>
+      <span id="timer" class="small" style="min-width:92px;text-align:right"></span>
       <button id="logout" class="btn">退出登录</button>
     </div>
 
@@ -53,7 +64,7 @@
     <div class="card" id="actions" style="display:none;gap:12px;align-items:center">
       <button id="submit" class="btn-primary">提交答案</button>
       <button id="toggleWrong" class="btn-primary" style="display:none">只看错题</button>
-      <button id="exportWrong" class="btn-primary" style="display:none">导出错题 JSON</button>
+      <button id="exportWrong" class="btn-primary" style="display:none">导出错题 PDF</button>
       <button id="viewHistory" class="btn">查看成绩记录</button>
     </div>
 
@@ -61,45 +72,94 @@
     <div class="card" id="historyPanel" style="display:none;max-width:100%;overflow:auto"></div>
   </main>
 
-  <!-- 全部逻辑放在一个模块脚本里，避免作用域问题 -->
+  <!-- 逻辑 -->
   <script type="module">
     import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-    // TODO: 替换成你自己的 URL 和 anon key
-    const supabase = createClient("https://tsximmhtxysoeabxwlkv.supabase.co","eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRzeGltbWh0eHlzb2VhYnh3bGt2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA4MDA2MTcsImV4cCI6MjA3NjM3NjYxN30.PQ0Fldv-vl4o_LH9niy2IbJwhcrCPbsaEM7sLEgXf8U");
+    // TODO: 替换为你自己的（保持与原来一致即可）
+    const supabase = createClient(
+      "https://tsximmhtxysoeabxwlkv.supabase.co",
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRzeGltbWh0eHlzb2VhYnh3bGt2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA4MDA2MTcsImV4cCI6MjA3NjM3NjYxN30.PQ0Fldv-vl4o_LH9niy2IbJwhcrCPbsaEM7sLEgXf8U"
+    );
 
-    // ========== 登录态检查 ==========
-    const { data:sessionData } = await supabase.auth.getSession();
+    // ========== 登录态 ==========
+    const { data: sessionData } = await supabase.auth.getSession();
     const session = sessionData.session;
-    if (!session) {
-      location.href = "auth.html";
-      throw new Error("Not signed in");
-    }
+    if (!session) { location.href = "auth.html"; throw new Error("Not signed in"); }
     const user = session.user;
 
-    // 显示姓名
-    async function showName() {
-      const { data:profile } = await supabase.from('profiles').select('full_name').eq('id', user.id).maybeSingle();
-      const name = profile?.full_name || localStorage.getItem('asvab_student_name') || user.email;
-      document.getElementById('whoami').textContent = `学员：${name}`;
+    // 学员姓名优先顺序：profiles.full_name → user_metadata.full_name/name → 本地缓存 → 邮箱
+    async function resolveStudentName() {
+      const metaName = user.user_metadata?.full_name || user.user_metadata?.name || "";
+      const localName = localStorage.getItem("asvab_student_name") || "";
+      let profileName = "";
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", user.id)
+        .maybeSingle();
+      profileName = profile?.full_name || "";
+
+      let name = profileName || metaName || localName;
+      if (!name) {
+        name = prompt("请输入您的姓名（将显示在成绩与导出PDF中）：")?.trim() || "";
+        if (name) {
+          localStorage.setItem("asvab_student_name", name);
+          // 尝试写回 profiles（忽略失败）
+          await supabase.from("profiles").upsert({ id: user.id, full_name: name });
+        }
+      } else {
+        // 同步一份到本地，便于离线显示
+        localStorage.setItem("asvab_student_name", name);
+      }
+      return name || user.email;
     }
-    await showName();
+
+    const studentName = await resolveStudentName();
+    document.getElementById("whoami").textContent = `学员：${studentName}`;
 
     // 退出登录
-    document.getElementById('logout').onclick = async () => {
+    document.getElementById("logout").onclick = async () => {
       await supabase.auth.signOut();
-      location.href = 'auth.html';
+      location.href = "auth.html";
     };
 
     // ========== UI / 状态 ==========
-    const setStatus = (t) => document.getElementById('status').textContent = t || '';
-    let activeSet=null, setsOfModule=[], questions=[], wrongList=[], onlyWrong=false;
-    let examStartTs=null, examEndTs=null, lastScore=0;
+    const setStatus = (t) => document.getElementById("status").textContent = t || "";
+    let activeSet = null, setsOfModule = [], questions = [], wrongList = [], onlyWrong = false;
+    let examStartTs = null, examEndTs = null, lastScore = 0, submitted = false;
+
+    // 计时器
+    let timerId = null, deadlineTs = null;
+    const timerEl = document.getElementById("timer");
+
+    function startTimer(limitMinutes) {
+      clearInterval(timerId);
+      if (!limitMinutes || limitMinutes <= 0) { timerEl.textContent = ""; return; }
+      deadlineTs = examStartTs + limitMinutes * 60 * 1000;
+      tick(); // 先渲染一次
+      timerId = setInterval(tick, 500);
+      function tick() {
+        const left = Math.max(0, deadlineTs - Date.now());
+        const mm = String(Math.floor(left / 60000)).padStart(2, "0");
+        const ss = String(Math.floor((left % 60000) / 1000)).padStart(2, "0");
+        timerEl.textContent = `⌛ ${mm}:${ss}`;
+        if (left <= 0) {
+          clearInterval(timerId);
+          if (!submitted) {
+            alert("时间到，已自动提交。");
+            doSubmit(true); // 自动交卷
+          }
+        }
+      }
+    }
 
     // ========== 载入整套 ==========
     async function onLoadClick(){
       const btn=document.getElementById('load');
       const mod=document.getElementById('module').value;
+      const limitMin = Number(document.getElementById('limitMin').value || 0);
 
       btn.disabled=true; btn.classList.add('is-loading'); btn.textContent='加载中…';
       setStatus('开始加载清单：/exams/manifest.json');
@@ -126,7 +186,7 @@
         document.getElementById('currentSet').textContent =
           `当前套卷：${activeSet.title}（共 ${activeSet.count ?? questions.length} 题）`;
 
-        renderQuiz();
+        renderQuiz(limitMin);
         setStatus(`✅ 已加载：${activeSet.title}（${questions.length} 题）`);
       }catch(e){
         console.error(e);
@@ -137,10 +197,10 @@
       }
     }
     document.getElementById('load').onclick = onLoadClick;
-    window.onLoadClick = onLoadClick;  // 让内联 onclick 能调用到
+    window.onLoadClick = onLoadClick;
 
     // ========== 渲染 ==========
-    function renderQuiz(){
+    function renderQuiz(limitMin){
       const quiz = document.getElementById('quiz');
       quiz.innerHTML = questions.map((it,idx)=>{
         const name=`q${idx}`;
@@ -157,7 +217,7 @@
           </div>`;
       }).join('');
 
-      wrongList=[]; onlyWrong=false;
+      wrongList=[]; onlyWrong=false; submitted=false;
       document.getElementById('actions').style.display='flex';
       document.getElementById('result').style.display='none';
       const toggleWrongBtn = document.getElementById('toggleWrong');
@@ -167,12 +227,16 @@
 
       // 开始计时
       examStartTs = Date.now();
-      examEndTs = null;
-      lastScore = 0;
+      examEndTs = null; lastScore = 0;
+      startTimer(limitMin);
     }
 
-    // ========== 判分 / 错题 / 导出 JSON ==========
-    document.getElementById('submit').addEventListener('click',async ()=>{
+    // ========== 判分 / 错题 / 导出 PDF ==========
+    async function doSubmit(auto=false){
+      if (submitted) return;
+      submitted = true;
+      clearInterval(timerId);
+
       let score=0; wrongList=[];
       questions.forEach((it,idx)=>{
         const chosen=document.querySelector(`input[name="q${idx}"]:checked`);
@@ -188,9 +252,9 @@
 
       const r=document.getElementById('result');
       r.style.display='block';
-      r.innerHTML=`<b>得分：${score}/${questions.length}</b> · 正确率 ${(score/questions.length*100).toFixed(0)}%`;
+      r.innerHTML=`<b>得分：${score}/${questions.length}</b> · 正确率 ${(score/questions.length*100).toFixed(0)}%` + (auto?'（已超时自动提交）':'');
       document.getElementById('toggleWrong').style.display='inline-block';
-      document.getElementById('exportWrong').style.display=wrongList.length?'inline-block':'none';
+      document.getElementById('exportWrong').style.display='inline-block';
 
       // 结束计时 + 保存到云端
       examEndTs = Date.now();
@@ -207,7 +271,9 @@
       };
       const { error } = await supabase.from('results').insert({ user_id: user.id, ...payload });
       if (error) console.error('保存成绩失败：', error);
-    });
+    }
+
+    document.getElementById('submit').addEventListener('click', ()=>doSubmit(false));
 
     document.getElementById('toggleWrong').addEventListener('click', () => {
       onlyWrong = !onlyWrong;
@@ -219,13 +285,63 @@
       document.getElementById('toggleWrong').textContent = onlyWrong ? '显示全部' : '只看错题';
     });
 
-    document.getElementById('exportWrong').addEventListener('click',()=>{
-      const data=wrongList.map(w=>({question:w.q,choices:w.choices,correctIndex:w.answer,userIndex:w.user??-1,explanation:w.explanation||''}));
-      const blob=new Blob([JSON.stringify({exportedAt:new Date().toISOString(),exam:activeSet?.title||'',items:data},null,2)],{type:'application/json'});
-      const url=URL.createObjectURL(blob); const a=document.createElement('a');
-      a.href=url; a.download=`ASVAB_${(activeSet?.id||'set')}_错题_${new Date().toISOString().slice(0,10)}.json`; a.click();
-      URL.revokeObjectURL(url);
-    });
+    // 生成一个可打印的 HTML 并调用浏览器“打印为 PDF”
+    function exportWrongAsPDF(){
+      const score = lastScore;
+      const total = questions.length;
+      const acc = Math.round(score/total*100);
+      const start = new Date(examStartTs).toLocaleString();
+      const end   = new Date(examEndTs).toLocaleString();
+      const dur   = Math.max(0, Math.floor((examEndTs - examStartTs)/1000));
+      const items = wrongList.map((w,i)=>{
+        const ua = w.user>=0 ? String.fromCharCode(65+w.user) : '未作答';
+        const ca = String.fromCharCode(65+w.answer);
+        const choices = w.choices.map((c,j)=>`${String.fromCharCode(65+j)}. ${c}`).join('<br/>');
+        return `
+          <div style="margin:12px 0;padding:10px;border:1px solid #e5e7eb;border-radius:10px;background:#fff">
+            <div><b>${i+1}. ${w.q}</b></div>
+            <div style="margin:6px 0">${choices}</div>
+            <div>你的答案：<b>${ua}</b>；正确答案：<b>${ca}</b></div>
+            ${w.explanation ? `<div style="margin-top:6px;color:#111827">解析：${w.explanation}</div>` : ''}
+          </div>
+        `;
+      }).join('');
+
+      const blocks = `
+        <div style="font-size:14px;color:#111827;margin-top:6px">
+          共 ${wrongList.length} 题
+        </div>
+        ${items}
+      `;
+
+      const html = `<!doctype html>
+<html><head><meta charset="utf-8">
+<title>错题导出 - ${activeSet?.title||''}</title>
+<style>
+  @media print { @page { margin: 14mm; } }
+  body{font:16px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial;color:#111827;margin:0;padding:18px}
+  h1{font-size:22px;margin:0 0 10px}
+  .grid{display:grid;grid-template-columns:140px 1fr;gap:6px 16px;margin:10px 0 18px}
+</style>
+</head>
+<body>
+  <h1>ASVAB 错题导出（PDF）</h1>
+  <div class="grid">
+    <div>学员</div><div>${studentName}</div>
+    <div>科目/套卷</div><div>${(document.getElementById('module').value)} / ${(activeSet?.title||activeSet?.id||'')}</div>
+    <div>考试时间</div><div>${start} — ${end}</div>
+    <div>用时</div><div>${dur} 秒</div>
+    <div>得分 / 题数</div><div>${score} / ${total}（正确率 ${acc}%）</div>
+  </div>
+  <h2 style="font-size:18px;margin:12px 0">错题明细</h2>
+  ${items.length ? blocks : '<div>恭喜，没有错题！</div>'}
+  <script>setTimeout(()=>{window.print()},300)</script>
+</body></html>`;
+      const w = window.open('', '_blank');
+      w.document.open(); w.document.write(html); w.document.close();
+    }
+
+    document.getElementById('exportWrong').addEventListener('click', exportWrongAsPDF);
 
     // ========== 成绩记录（云端读取） ==========
     document.getElementById('viewHistory').addEventListener('click', async () => {

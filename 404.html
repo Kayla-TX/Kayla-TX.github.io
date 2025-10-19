@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>404 页面未找到</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <a href="/" style="color:#67e8f9;text-decoration:none;">← 返回首页</a>
+    </div>
+  </header>
+  <main class="wrap" style="text-align:center;padding:60px 20px;">
+    <h1>⚠️ 页面未找到</h1>
+    <p>抱歉，你访问的页面不存在或已被移动。</p>
+    <p><a class="btn" href="/">回到首页</a></p>
+  </main>
+  <footer>
+    <p>© <span id="y"></span> ASVAB 学习指南</p>
+  </footer>
+  <script>document.getElementById('y').textContent = new Date().getFullYear();</script>
+</body>
+</html>

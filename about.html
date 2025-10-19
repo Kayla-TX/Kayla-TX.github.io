@@ -1,12 +1,40 @@
-<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>关于 · ASVAB 学习指南</title>
-<link rel="stylesheet" href="styles.css">
-<header><div class="wrap"><a href="/">← 返回首页</a> · 关于本站</div></header>
-<main class="wrap">
-  <h1>关于本站</h1>
-  <div class="card">
-    <p>本站为 ASVAB 学习指南（MVP）。完整版采用授权访问，仅供老师邀请的学生使用。</p>
-  </div>
-</main>
-<footer class="wrap">© <span id="y"></span> ASVAB 学习指南</footer>
-<script>document.getElementById('y').textContent=new Date().getFullYear()</script>
+cat > about.html <<'EOF'
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>关于本站 · ASVAB 学习指南</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <a href="/" style="color:#67e8f9;text-decoration:none;">← 返回首页</a>
+    </div>
+  </header>
+  <main class="wrap">
+    <h1>关于本站</h1>
+    <div class="card">
+      <p>本网站由 <b>Kayla 老师</b> 授权建立，旨在为学生提供 ASVAB 考试学习资料与练习指引。</p>
+      <p>当前版本为 MVP（最简可用版），仅包含核心内容。后续版本将开放：</p>
+      <ul>
+        <li>在线题库与分模块测验</li>
+        <li>个性化学习进度追踪</li>
+        <li>受邀学生专属登录功能</li>
+      </ul>
+      <p>联系方式：</p>
+      <ul>
+        <li>Email: <a href="mailto:teacher@example.com">teacher@example.com</a></li>
+        <li>GitHub: <a href="https://github.com/Kayla-TX" target="_blank">Kayla-TX</a></li>
+      </ul>
+    </div>
+  </main>
+  <footer>
+    <p>© <span id="y"></span> ASVAB 学习指南 • 授权访问</p>
+  </footer>
+  <script>document.getElementById('y').textContent = new Date().getFullYear();</script>
+</body>
+</html>
+EOF
+

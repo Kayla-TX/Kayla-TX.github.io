@@ -1,10 +1,10 @@
 {
   "module": "AR",
-  "title": "AR 模拟题·第1套",
+  "title": "AR",
   "questions": [
-    {"q":"一件商品打八折后 $56，原价？","choices":["$64","$68","$70","$72"],"answer":2,"explanation":"56/0.8=70"},
-    {"q":"3 小时行 180 英里，平均速度？","choices":["50 mph","55 mph","60 mph","65 mph"],"answer":2,"explanation":"180/3=60"},
-    {"q":"1 加仑=4 夸脱，5 夸脱=？加仑","choices":["1.0","1.25","1.5","2.0"],"answer":1,"explanation":"5/4=1.25"},
-    {"q":"价格 40 涨到 50，涨幅？","choices":["20%","22%","25%","28%"],"answer":2,"explanation":"(50-40)/40=25%"}
+    {"q":"80off $56，ori？","choices":["$64","$68","$70","$72"],"answer":2,"explanation":"56/0.8=70"},
+    {"q":"3 h 180 mile里，ave speed？","choices":["50 mph","55 mph","60 mph","65 mph"],"answer":2,"explanation":"180/3=60"},
+    {"q":"1 gal=4 curt，5 curt=？gal","choices":["1.0","1.25","1.5","2.0"],"answer":1,"explanation":"5/4=1.25"},
+    {"q":"price 40 up to 50，price inc？","choices":["20%","22%","25%","28%"],"answer":2,"explanation":"(50-40)/40=25%"}
   ]
 }

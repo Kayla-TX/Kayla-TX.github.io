@@ -72,6 +72,57 @@
     import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
     const { jsPDF } = await import("https://esm.sh/jspdf@2.5.1");
 
+    const PDF_FONT_NAME = 'NotoSansSC';
+    const PDF_FONT_FILE = 'NotoSansSC-Regular.ttf';
+    const PDF_FONT_URL = 'https://unpkg.com/@fontsource/noto-sans-sc@5.0.0/files/noto-sans-sc-chinese-simplified-400-normal.ttf';
+
+    let pdfFontBase64 = '';
+    let pdfFontLoadingPromise = null;
+
+    const arrayBufferToBase64 = (buffer) => {
+      const bytes = new Uint8Array(buffer);
+      const chunk = 0x8000;
+      const chunks = [];
+      for (let i = 0; i < bytes.length; i += chunk) {
+        const sub = bytes.subarray(i, i + chunk);
+        chunks.push(String.fromCharCode.apply(null, sub));
+      }
+      return btoa(chunks.join(''));
+    };
+
+    const ensurePdfFont = async (doc) => {
+      const fontList = doc.getFontList?.() || {};
+      if (fontList[PDF_FONT_NAME]) {
+        doc.setFont(PDF_FONT_NAME, 'normal');
+        return;
+      }
+
+      if (!pdfFontBase64) {
+        if (!pdfFontLoadingPromise) {
+          pdfFontLoadingPromise = (async () => {
+            const res = await fetch(PDF_FONT_URL);
+            if (!res.ok) {
+              throw new Error(`字体下载失败（HTTP ${res.status}）`);
+            }
+            const buffer = await res.arrayBuffer();
+            pdfFontBase64 = arrayBufferToBase64(buffer);
+            return pdfFontBase64;
+          })().catch(err => {
+            pdfFontLoadingPromise = null;
+            throw err;
+          });
+        }
+        await pdfFontLoadingPromise;
+      }
+
+      if (pdfFontBase64) {
+        doc.addFileToVFS(PDF_FONT_FILE, pdfFontBase64);
+        doc.addFont(PDF_FONT_FILE, PDF_FONT_NAME, 'normal');
+        doc.setFont(PDF_FONT_NAME, 'normal');
+      }
+    };
+
+
     // TODO: 替换成你自己的 URL 和 anon key
     const supabase = createClient("https://tsximmhtxysoeabxwlkv.supabase.co","eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRzeGltbWh0eHlzb2VhYnh3bGt2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA4MDA2MTcsImV4cCI6MjA3NjM3NjYxN30.PQ0Fldv-vl4o_LH9niy2IbJwhcrCPbsaEM7sLEgXf8U");
 
@@ -291,22 +342,47 @@ document.getElementById('submit').addEventListener('click',()=>submitQuiz(false)
       document.getElementById('toggleWrong').textContent = onlyWrong ? '显示全部' : '只看错题';
     });
 
-    document.getElementById('exportWrong').addEventListener('click',()=>{
+    document.getElementById('exportWrong').addEventListener('click',async ()=>{
       const doc = new jsPDF({ unit: 'pt', format: 'a4' });
       const margin = 48;
       let y = margin;
       const pageHeight = doc.internal.pageSize.getHeight();
       const lineHeight = 18;
+      let fontReady = true;
+      try {
+        await ensurePdfFont(doc);
+      } catch (err) {
+        fontReady = false;
+        console.error('PDF 字体加载失败：', err);
+        alert('字体加载失败，导出的 PDF 可能会出现乱码。请检查网络后重试。');
+      }
+
+      if (!fontReady) {
+        doc.setFont('helvetica', 'normal');
+      }
+
+      doc.setTextColor(20);
+
 
       const addText = (text, options={}) => {
         const { fontSize=12, gap=lineHeight } = options;
         doc.setFontSize(fontSize);
+        if (fontReady && PDF_FONT_NAME) {
+          doc.setFont(PDF_FONT_NAME, 'normal');
+        } else {
+          doc.setFont('helvetica', 'normal');
+        }
         const lines = doc.splitTextToSize(text, doc.internal.pageSize.getWidth() - margin * 2);
         lines.forEach((line) => {
           if (y + gap > pageHeight - margin) {
             doc.addPage();
             y = margin;
             doc.setFontSize(fontSize);
+            if (fontReady && PDF_FONT_NAME) {
+              doc.setFont(PDF_FONT_NAME, 'normal');
+            } else {
+              doc.setFont('helvetica', 'normal');
+            }
           }
           doc.text(line, margin, y);
           y += gap;

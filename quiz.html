@@ -99,28 +99,32 @@ cat > quiz.html <<'EOF'
   let picked=[], onlyWrong=false, wrongList=[];
 
   // 渲染
-  function renderQuiz(){
-    const quiz=document.getElementById('quiz');
-    quiz.innerHTML=picked.map((item,idx)=>{
-      const name=\`${idx}\`;
-      const choices=item.c.map((t,i)=>\`
-        <label style="display:block;margin:6px 0;">
-          <input type="radio" name="\${name}" value="\${i}"> \${String.fromCharCode(65+i)}. \${t}
-        </label>\`).join('');
-      return \`
-        <div class="card" data-idx="\${idx}">
-          <div style="font-weight:600;margin-bottom:6px;">\${idx+1}. \${item.q}</div>
-          <div>\${choices}</div>
-          <div id="exp-\${idx}" class="small" style="display:none;margin-top:8px;"></div>
-        </div>\`;
-    }).join('');
-    document.getElementById('actions').style.display='flex';
-    document.getElementById('result').style.display='none';
-    document.getElementById('toggleWrong').style.display='none';
-    document.getElementById('exportWrong').style.display='none';
-    document.getElementById('retry').style.display='inline-block';
-    onlyWrong=false;
-  }
+  function renderQuiz() {
+  const quiz = document.getElementById('quiz');
+  quiz.innerHTML = picked.map((item, idx) => {
+    const name = `q${idx}`;
+    const choices = item.c.map((t, i) => `
+      <label style="display:block;margin:6px 0;">
+        <input type="radio" name="${name}" value="${i}"> ${String.fromCharCode(65 + i)}. ${t}
+      </label>
+    `).join('');
+    return `
+      <div class="card" data-idx="${idx}">
+        <div style="font-weight:600;margin-bottom:6px;">${idx + 1}. ${item.q}</div>
+        <div>${choices}</div>
+        <div id="exp-${idx}" class="small" style="display:none;margin-top:8px;"></div>
+      </div>
+    `;
+  }).join('');
+
+  document.getElementById('actions').style.display = 'flex';
+  document.getElementById('result').style.display = 'none';
+  document.getElementById('toggleWrong').style.display = 'none';
+  document.getElementById('exportWrong').style.display = 'none';
+  document.getElementById('retry').style.display = 'none';
+  onlyWrong = false;
+}
+
 
   // 核心函数（按钮 onclick 也会调用它）
   function generate(){
@@ -134,43 +138,64 @@ cat > quiz.html <<'EOF'
   window.generate = generate; // 暴露到全局给 onclick 用
 
   // 事件
-  document.getElementById('submit').addEventListener('click', ()=>{
-    let score=0; wrongList=[];
-    picked.forEach((item,idx)=>{
-      const chosen=document.querySelector(\`input[name="q\${idx}"]:checked\`);
-      const exp=document.getElementById(\`exp-\${idx}\`);
-      const user=chosen?Number(chosen.value):-1;
-      const ok=user===item.a;
-      if(ok)score++; else wrongList.push({...item,user});
-      exp.style.display='block';
-      exp.innerHTML= ok
-        ? \`✅ 正确：\${String.fromCharCode(65+item.a)}。\${item.e}\`
-        : \`❌ 你的答案：\${user>=0?String.fromCharCode(65+user):"未作答"}；正确：\${String.fromCharCode(65+item.a)}。\${item.e}\`;
-    });
-    const result=document.getElementById('result');
-    result.style.display='block';
-    result.innerHTML=\`<b>得分：\${score}/\${picked.length}</b> · 正确率 \${(score/picked.length*100).toFixed(0)}%\`;
-    document.getElementById('toggleWrong').style.display='inline-block';
-    document.getElementById('exportWrong').style.display=wrongList.length?'inline-block':'none';
+  // 事件
+document.getElementById('submit').addEventListener('click', () => {
+  let score = 0;
+  wrongList = [];
+  picked.forEach((item, idx) => {
+    const chosen = document.querySelector(`input[name="q${idx}"]:checked`);
+    const exp = document.getElementById(`exp-${idx}`);
+    const user = chosen ? Number(chosen.value) : -1;
+    const ok = user === item.a;
+    if (ok) score++; else wrongList.push({ ...item, user });
+    exp.style.display = 'block';
+    exp.innerHTML = ok
+      ? `✅ 正确：${String.fromCharCode(65 + item.a)}。${item.e}`
+      : `❌ 你的答案：${user >= 0 ? String.fromCharCode(65 + user) : "未作答"}；正确：${String.fromCharCode(65 + item.a)}。${item.e}`;
   });
 
-  document.getElementById('toggleWrong').addEventListener('click', ()=>{
-    onlyWrong=!onlyWrong;
-    picked.forEach((_,idx)=>{
-      const card=document.querySelector(\`.card[data-idx="\${idx}"]\`);
-      const isWrong=wrongList.some(w=>w.q===picked[idx].q);
-      card.style.display=(onlyWrong&&!isWrong)?'none':'block';
-    });
-    document.getElementById('toggleWrong').textContent=onlyWrong?'显示全部':'只看错题';
-  });
+  const result = document.getElementById('result');
+  result.style.display = 'block';
+  result.innerHTML = `<b>得分：${score}/${picked.length}</b> · 正确率 ${(score / picked.length * 100).toFixed(0)}%`;
 
-  document.getElementById('exportWrong').addEventListener('click', ()=>{
-    const data=wrongList.map(w=>({module:w.m,question:w.q,choices:w.c,correctIndex:w.a,userIndex:w.user,explanation:w.e}));
-    const blob=new Blob([JSON.stringify({exportedAt:new Date().toISOString(),items:data},null,2)],{type:'application/json'});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a'); a.href=url; a.download='asvab_wrong_questions.json'; a.click();
-    URL.revokeObjectURL(url);
+  document.getElementById('toggleWrong').style.display = 'inline-block';
+  document.getElementById('exportWrong').style.display = wrongList.length ? 'inline-block' : 'none';
+  document.getElementById('retry').style.display = 'inline-block';
+});
+
+document.getElementById('toggleWrong').addEventListener('click', () => {
+  onlyWrong = !onlyWrong;
+  picked.forEach((_, idx) => {
+    const card = document.querySelector(`.card[data-idx="${idx}"]`);
+    const isWrong = wrongList.some(w => w.q === picked[idx].q);
+    card.style.display = (onlyWrong && !isWrong) ? 'none' : 'block';
   });
+  document.getElementById('toggleWrong').textContent = onlyWrong ? '显示全部' : '只看错题';
+});
+
+document.getElementById('exportWrong').addEventListener('click', () => {
+  const data = wrongList.map(w => ({
+    module: w.m,
+    question: w.q,
+    choices: w.c,
+    correctIndex: w.a,
+    userIndex: w.user,
+    explanation: w.e
+  }));
+  const blob = new Blob(
+    [JSON.stringify({ exportedAt: new Date().toISOString(), items: data }, null, 2)],
+    { type: 'application/json' }
+  );
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'asvab_wrong_questions.json';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('retry').addEventListener('click', generate);
+
 
   // 页面载入时先生成一套默认题
   generate();

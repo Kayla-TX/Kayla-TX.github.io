@@ -1,4 +1,62 @@
-<!doctype html><meta charset="utf-8">
-<title>ASVAB MVP</title>
-<h1>ASVAB 学习指南（MVP）</h1>
-<p>首发版本成功上线！</p>
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ASVAB 学习指南（MVP）</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div class="wrap" style="display:flex; align-items:center; justify-content:space-between;">
+      <div style="font-weight:600;">ASVAB 学习指南 <small style="color:#67e8f9;">MVP</small></div>
+      <nav>
+        <a href="#sections">考试模块</a>
+        <a href="#tips">高频考点</a>
+        <a href="#plan">备考计划</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h1>从这里开始准备 ASVAB</h1>
+      <p>这是首发版网站的首页。下面四个模块分别对应主要考试科目，点击可进入详情。</p>
+    </section>
+
+    <section id="sections" class="wrap">
+      <h2>考试模块一览</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>AR 算术推理</h3>
+          <p>速算、比例、单位换算与应用题阅读。</p>
+          <a class="btn" href="ar.html">查看要点</a>
+        </div>
+        <div class="card">
+          <h3>MK 数学知识</h3>
+          <p>代数基础、方程不等式、百分比与几何初步。</p>
+          <a class="btn" href="mk.html">查看要点</a>
+        </div>
+        <div class="card">
+          <h3>WK & PC 词汇与阅读</h3>
+          <p>词根词缀、近义反义、一段短文主旨。</p>
+          <a class="btn" href="wk-pc.html">查看要点</a>
+        </div>
+        <div class="card">
+          <h3>GS 自然科学</h3>
+          <p>生物/化学/物理常识与日常应用。</p>
+          <a class="btn" href="gs.html">查看要点</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>© <span id="y"></span> ASVAB 学习指南 • 仅供授权学生使用</p>
+  </footer>
+
+  <script>
+    document.getElementById('y').textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>

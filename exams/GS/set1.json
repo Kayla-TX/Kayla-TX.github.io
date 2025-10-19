@@ -1,0 +1,10 @@
+{
+  "module": "GS",
+  "title": "GS 模拟题·第1套",
+  "questions": [
+    {"q":"水的化学式？","choices":["H₂O","CO₂","O₂","NaCl"],"answer":0,"explanation":"H₂O"},
+    {"q":"地球绕太阳一圈约？","choices":["1 天","1 月","1 年","10 年"],"answer":2,"explanation":"约1年"},
+    {"q":"呼吸系统主要器官？","choices":["心脏","肺","肾","胃"],"answer":1,"explanation":"肺"},
+    {"q":"植物制造食物的过程？","choices":["消化","光合作用","蒸发","氧化"],"answer":1,"explanation":"光合作用"}
+  ]
+}

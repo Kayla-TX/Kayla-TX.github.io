@@ -1,0 +1,10 @@
+{
+  "module": "WK",
+  "title": "WK/PC 模拟题·第1套",
+  "questions": [
+    {"q":"'benevolent' 的意思是？","choices":["恶意的","友善的","懒惰的","冷漠的"],"answer":1,"explanation":"bene- 好"},
+    {"q":"'antonym' 是？","choices":["同义词","反义词","名词","形容词"],"answer":1,"explanation":"antonym: 反义词"},
+    {"q":"'The sun dipped below the horizon' 含义？","choices":["太阳升起","太阳下山","天气炎热","夜晚来临"],"answer":1,"explanation":"下山"},
+    {"q":"'reluctant' 含义？","choices":["渴望的","害怕的","不情愿的","兴奋的"],"answer":2,"explanation":"unwilling"}
+  ]
+}

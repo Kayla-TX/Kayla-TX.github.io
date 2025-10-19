@@ -4,8 +4,8 @@ cat > quiz.html <<'EOF'
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>ASVAB 小测（AR / MK / WK / GS）· 学习指南</title>
-  <meta name="description" content="ASVAB 小测：支持 AR、MK、WK/PC、GS，随机抽题，自动判分、只看错题、导出错题 JSON。">
+  <title>ASVAB 模拟题（整套）</title>
+  <meta name="description" content="选择科目即可做整套 ASVAB 模拟题。支持多套题、只看错题、导出错题 JSON。">
   <link rel="stylesheet" href="styles.css">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
 </head>
@@ -13,17 +13,15 @@ cat > quiz.html <<'EOF'
   <header>
     <div class="wrap" style="display:flex;align-items:center;justify-content:space-between;">
       <div style="font-weight:600;"><a href="/" style="color:#e5e7eb;text-decoration:none;">ASVAB 学习指南</a></div>
-      <nav>
-        <a href="/">首页</a>
-        <a href="about.html">关于</a>
-      </nav>
+      <nav><a href="/">首页</a><a href="about.html">关于</a></nav>
     </div>
   </header>
 
   <main class="wrap">
-    <h1>ASVAB 小测</h1>
+    <h1>ASVAB 模拟题（整套）</h1>
+
     <div class="card" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
-      <label>模块：
+      <label>科目：
         <select id="module">
           <option value="AR">AR 算术推理</option>
           <option value="MK">MK 数学知识</option>
@@ -31,18 +29,11 @@ cat > quiz.html <<'EOF'
           <option value="GS">GS 自然科学</option>
         </select>
       </label>
-      <label>题量：
-        <select id="count">
-          <option value="5">5</option>
-          <option value="10">10</option>
-        </select>
-      </label>
-      <!-- 兜底：直接在按钮上绑定 onclick -->
-      <button id="gen" class="btn" onclick="generate()">生成试卷</button>
-      <a class="btn" href="/" style="margin-left:auto;">回首页</a>
-    </div>
+      <button id="load" class="btn">加载整套</button>
 
-    <div class="card small" style="margin-top:8px;">🟡 提示：如果看不到题目，确认你访问的是 <b>/quiz.html</b>，不是 <b>/quiz.js</b>。可尝试强制刷新（Mac: Cmd+Shift+R / Win: Ctrl+F5）。</div>
+      <span id="currentSet" class="small" style="margin-left:auto;"></span>
+      <button id="switchSet" class="btn" style="display:none;">更多套卷</button>
+    </div>
 
     <div id="quiz"></div>
 
@@ -50,7 +41,7 @@ cat > quiz.html <<'EOF'
       <button id="submit" class="btn">提交答案</button>
       <button id="toggleWrong" class="btn" style="display:none;">只看错题</button>
       <button id="exportWrong" class="btn" style="display:none;">导出错题 JSON</button>
-      <button id="retry" class="btn" style="display:none;" onclick="generate()">重抽一套</button>
+      <button id="retry" class="btn" style="display:none;">重做本套</button>
     </div>
 
     <div class="card" id="result" style="display:none;margin-top:16px;"></div>
@@ -61,145 +52,136 @@ cat > quiz.html <<'EOF'
   </footer>
 
   <script>
-  document.getElementById('y').textContent = new Date().getFullYear();
-
-  // 题库
-  const BANK = [
-    // AR
-    { m:'AR', q:"一件商品打八折后是 $56，原价是多少？", c:["$64","$68","$70","$72"], a:2, e:"八折=0.8；原价=56/0.8=70。" },
-    { m:'AR', q:"3 小时行驶 180 英里，平均速度？", c:["50 mph","55 mph","60 mph","65 mph"], a:2, e:"180/3=60 mph。" },
-    { m:'AR', q:"1 加仑=4 夸脱。5 夸脱等于几加仑？", c:["1.0","1.25","1.5","2.0"], a:1, e:"5÷4=1.25 加仑。" },
-    { m:'AR', q:"价格从 $40 涨到 $50，涨幅百分比？", c:["20%","22%","25%","28%"], a:2, e:"(50-40)/40=25%。" },
-    { m:'AR', q:"长 12 宽 8 的矩形面积？", c:["80","88","92","96"], a:3, e:"12×8=96。" },
-    // MK
-    { m:'MK', q:"若 2x + 6 = 18，则 x = ？", c:["4","5","6","7"], a:2, e:"2x=12→x=6。" },
-    { m:'MK', q:"三角形面积公式？", c:["bh","πr²","1/2·bh","2πr"], a:2, e:"面积=½·底·高。" },
-    { m:'MK', q:"25% 等于？", c:["1/2","1/3","1/4","1/5"], a:2, e:"25%=1/4。" },
-    { m:'MK', q:"圆的周长公式？", c:["2πr","πr²","r²/2","π/2"], a:0, e:"C=2πr。" },
-    { m:'MK', q:"5x-15=0，x=?", c:["-3","0","3","15"], a:2, e:"x=15/5=3。" },
-    // WK / PC
-    { m:'WK', q:"'benevolent' 的意思是？", c:["恶意的","友善的","懒惰的","冷漠的"], a:1, e:"bene- 表示“好”，benevolent=善良的。" },
-    { m:'WK', q:"'antonym' 意思是？", c:["同义词","反义词","名词","形容词"], a:1, e:"antonym = opposite meaning。" },
-    { m:'WK', q:"'The sun dipped below the horizon' 的含义是？", c:["太阳升起","太阳下山","天气炎热","夜晚来临"], a:1, e:"dipped below horizon = 下山。" },
-    { m:'WK', q:"词根 'bio' 的含义？", c:["生命","时间","地球","声音"], a:0, e:"bio = life。" },
-    { m:'WK', q:"'reluctant' 的意思？", c:["渴望的","害怕的","不情愿的","兴奋的"], a:2, e:"reluctant = unwilling。" },
-    // GS
-    { m:'GS', q:"水的化学式？", c:["H₂O","CO₂","O₂","NaCl"], a:0, e:"水 = H₂O。" },
-    { m:'GS', q:"地球绕太阳一圈约？", c:["1 天","1 周","1 月","1 年"], a:3, e:"约 1 年。" },
-    { m:'GS', q:"呼吸系统主要器官？", c:["心脏","肺","肾","胃"], a:1, e:"肺负责气体交换。" },
-    { m:'GS', q:"植物制造食物的过程？", c:["消化","光合作用","蒸发","氧化"], a:1, e:"光合作用。" },
-    { m:'GS', q:"能量单位？", c:["米","焦耳","升","克"], a:1, e:"J（焦耳）。" },
-  ];
-
-  // 工具
-  function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a;}
-  function sample(arr,n){return shuffle([...arr]).slice(0,n);}
-
-  // 状态
-  let picked=[], onlyWrong=false, wrongList=[];
-
-  // 渲染
-  function renderQuiz() {
-  const quiz = document.getElementById('quiz');
-  quiz.innerHTML = picked.map((item, idx) => {
-    const name = `q${idx}`;
-    const choices = item.c.map((t, i) => `
-      <label style="display:block;margin:6px 0;">
-        <input type="radio" name="${name}" value="${i}"> ${String.fromCharCode(65 + i)}. ${t}
-      </label>
-    `).join('');
-    return `
-      <div class="card" data-idx="${idx}">
-        <div style="font-weight:600;margin-bottom:6px;">${idx + 1}. ${item.q}</div>
-        <div>${choices}</div>
-        <div id="exp-${idx}" class="small" style="display:none;margin-top:8px;"></div>
-      </div>
-    `;
-  }).join('');
-
-  document.getElementById('actions').style.display = 'flex';
-  document.getElementById('result').style.display = 'none';
-  document.getElementById('toggleWrong').style.display = 'none';
-  document.getElementById('exportWrong').style.display = 'none';
-  document.getElementById('retry').style.display = 'none';
-  onlyWrong = false;
-}
-
-
-  // 核心函数（按钮 onclick 也会调用它）
-  function generate(){
-    const mod=document.getElementById('module').value;
-    const cnt=Number(document.getElementById('count').value);
-    const pool=BANK.filter(x=>x.m===mod);
-    picked=sample(pool,Math.min(cnt,pool.length));
-    wrongList=[];
-    renderQuiz();
-  }
-  window.generate = generate; // 暴露到全局给 onclick 用
-
-  // 事件
-  // 事件
-document.getElementById('submit').addEventListener('click', () => {
-  let score = 0;
-  wrongList = [];
-  picked.forEach((item, idx) => {
-    const chosen = document.querySelector(`input[name="q${idx}"]:checked`);
-    const exp = document.getElementById(`exp-${idx}`);
-    const user = chosen ? Number(chosen.value) : -1;
-    const ok = user === item.a;
-    if (ok) score++; else wrongList.push({ ...item, user });
-    exp.style.display = 'block';
-    exp.innerHTML = ok
-      ? `✅ 正确：${String.fromCharCode(65 + item.a)}。${item.e}`
-      : `❌ 你的答案：${user >= 0 ? String.fromCharCode(65 + user) : "未作答"}；正确：${String.fromCharCode(65 + item.a)}。${item.e}`;
-  });
-
-  const result = document.getElementById('result');
-  result.style.display = 'block';
-  result.innerHTML = `<b>得分：${score}/${picked.length}</b> · 正确率 ${(score / picked.length * 100).toFixed(0)}%`;
-
-  document.getElementById('toggleWrong').style.display = 'inline-block';
-  document.getElementById('exportWrong').style.display = wrongList.length ? 'inline-block' : 'none';
-  document.getElementById('retry').style.display = 'inline-block';
-});
-
-document.getElementById('toggleWrong').addEventListener('click', () => {
-  onlyWrong = !onlyWrong;
-  picked.forEach((_, idx) => {
-    const card = document.querySelector(`.card[data-idx="${idx}"]`);
-    const isWrong = wrongList.some(w => w.q === picked[idx].q);
-    card.style.display = (onlyWrong && !isWrong) ? 'none' : 'block';
-  });
-  document.getElementById('toggleWrong').textContent = onlyWrong ? '显示全部' : '只看错题';
-});
-
-document.getElementById('exportWrong').addEventListener('click', () => {
-  const data = wrongList.map(w => ({
-    module: w.m,
-    question: w.q,
-    choices: w.c,
-    correctIndex: w.a,
-    userIndex: w.user,
-    explanation: w.e
-  }));
-  const blob = new Blob(
-    [JSON.stringify({ exportedAt: new Date().toISOString(), items: data }, null, 2)],
-    { type: 'application/json' }
-  );
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'asvab_wrong_questions.json';
-  a.click();
-  URL.revokeObjectURL(url);
-});
-
-document.getElementById('retry').addEventListener('click', generate);
-
-
-  // 页面载入时先生成一套默认题
-  generate();
-  </script>
+    /* ========= 基础工具 ========= */
+    document.getElementById('y')?.textContent = new Date().getFullYear();
+    let MANIFEST=null, setsOfModule=[], activeSet=null, questions=[], wrongList=[], onlyWrong=false;
+    
+    async function loadManifest(){
+      if (MANIFEST) return;
+      const res = await fetch('exams/manifest.json?v=1');
+      MANIFEST = await res.json();
+    }
+    
+    async function loadSet(module, setIndex=0){
+      await loadManifest();
+      setsOfModule = MANIFEST[module] || [];
+      if (!setsOfModule.length) { alert('该科目暂无套卷'); return; }
+      activeSet = setsOfModule[Math.max(0, Math.min(setIndex, setsOfModule.length-1))];
+    
+      const curr = document.getElementById('currentSet');
+      curr.textContent = `当前套卷：${activeSet.title}（共 ${activeSet.count ?? 'N'} 题）`;
+      document.getElementById('switchSet').style.display = setsOfModule.length > 1 ? 'inline-block' : 'none';
+    
+      const res = await fetch(`${activeSet.file}?v=1`);
+      const data = await res.json();
+      questions = data.questions || [];
+      renderQuiz();
+    }
+    
+    /* ========= 渲染 ========= */
+    function renderQuiz(){
+      const quiz = document.getElementById('quiz');
+      quiz.innerHTML = questions.map((item, idx) => {
+        const name = `q${idx}`;
+        const choices = item.choices.map((t,i) => `
+          <label style="display:block;margin:6px 0;">
+            <input type="radio" name="${name}" value="${i}"> ${String.fromCharCode(65+i)}. ${t}
+          </label>
+        `).join('');
+        return `
+          <div class="card" data-idx="${idx}">
+            <div style="font-weight:600;margin-bottom:6px;">${idx+1}. ${item.q}</div>
+            <div>${choices}</div>
+            <div id="exp-${idx}" class="small" style="display:none;margin-top:8px;"></div>
+          </div>
+        `;
+      }).join('');
+    
+      wrongList = [];
+      onlyWrong = false;
+      document.getElementById('actions').style.display = 'flex';
+      document.getElementById('result').style.display = 'none';
+      document.getElementById('toggleWrong').style.display = 'none';
+      document.getElementById('exportWrong').style.display = 'none';
+      document.getElementById('retry').style.display = 'inline-block';
+    }
+    
+    /* ========= 事件 ========= */
+    document.getElementById('load').addEventListener('click', async () => {
+      const mod = document.getElementById('module').value;
+      await loadSet(mod, 0);
+    });
+    
+    document.getElementById('switchSet').addEventListener('click', async () => {
+      const names = setsOfModule.map((s,i)=>`${i+1}. ${s.title}`).join('\n');
+      const pick = prompt(`共有 ${setsOfModule.length} 套：\n${names}\n\n请输入要切换到的序号（1-${setsOfModule.length}）：`);
+      if (!pick) return;
+      const idx = Number(pick) - 1;
+      if (Number.isInteger(idx) && idx>=0 && idx<setsOfModule.length) {
+        await loadSet(document.getElementById('module').value, idx);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else { alert('输入无效'); }
+    });
+    
+    document.getElementById('submit').addEventListener('click', () => {
+      let score = 0; wrongList = [];
+      questions.forEach((item, idx) => {
+        const chosen = document.querySelector(`input[name="q${idx}"]:checked`);
+        const exp = document.getElementById(`exp-${idx}`);
+        const user = chosen ? Number(chosen.value) : -1;
+        const ok = user === item.answer;
+        if (ok) score++; else wrongList.push({ ...item, user });
+        exp.style.display = 'block';
+        exp.innerHTML = ok
+          ? `✅ 正确：${String.fromCharCode(65 + item.answer)}。${item.explanation || ''}`
+          : `❌ 你的答案：${user>=0 ? String.fromCharCode(65+user) : '未作答'}；正确：${String.fromCharCode(65 + item.answer)}。${item.explanation || ''}`;
+      });
+    
+      const result = document.getElementById('result');
+      result.style.display = 'block';
+      result.innerHTML = `<b>得分：${score}/${questions.length}</b> · 正确率 ${(score/questions.length*100).toFixed(0)}%`;
+    
+      document.getElementById('toggleWrong').style.display = 'inline-block';
+      document.getElementById('exportWrong').style.display = wrongList.length ? 'inline-block' : 'none';
+    });
+    
+    document.getElementById('toggleWrong').addEventListener('click', () => {
+      onlyWrong = !onlyWrong;
+      questions.forEach((_, idx) => {
+        const card = document.querySelector(`.card[data-idx="${idx}"]`);
+        const isWrong = wrongList.some(w => w.q === questions[idx].q);
+        card.style.display = (onlyWrong && !isWrong) ? 'none' : 'block';
+      });
+      document.getElementById('toggleWrong').textContent = onlyWrong ? '显示全部' : '只看错题';
+    });
+    
+    document.getElementById('exportWrong').addEventListener('click', () => {
+      const data = wrongList.map(w => ({
+        module: w.module || activeSet?.module,
+        question: w.q,
+        choices: w.choices,
+        correctIndex: w.answer,
+        userIndex: w.user ?? -1,
+        explanation: w.explanation || ''
+      }));
+      const blob = new Blob(
+        [JSON.stringify({ exportedAt: new Date().toISOString(), exam: activeSet?.title, items: data }, null, 2)],
+        { type: 'application/json' }
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `asvab_wrong_${activeSet?.id || 'set'}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+    
+    document.getElementById('retry').addEventListener('click', () => renderQuiz());
+    
+    /* 默认加载 AR 第1套 */
+    loadSet('AR', 0);
+    </script>
+    
 </body>
 </html>
 EOF

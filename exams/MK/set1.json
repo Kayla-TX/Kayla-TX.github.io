@@ -1,0 +1,10 @@
+{
+  "module": "MK",
+  "title": "MK 模拟题·第1套",
+  "questions": [
+    {"q":"2x+6=18，x=?","choices":["4","5","6","7"],"answer":2,"explanation":"x=6"},
+    {"q":"三角形面积公式？","choices":["bh","πr²","1/2·bh","2πr"],"answer":2,"explanation":"A=1/2·bh"},
+    {"q":"25% 等于？","choices":["1/2","1/3","1/4","1/5"],"answer":2,"explanation":"0.25=1/4"},
+    {"q":"圆的周长？","choices":["2πr","πr²","r²/2","π/2"],"answer":0,"explanation":"C=2πr"}
+  ]
+}

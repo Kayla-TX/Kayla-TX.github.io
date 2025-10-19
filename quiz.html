@@ -4,27 +4,27 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>ASVAB 模拟题（整套）</title>
-  <link rel="stylesheet" href="styles.css" />
   <style>
-    .btn-primary{background:linear-gradient(135deg,#06b6d4,#3b82f6);color:#fff;border:0;padding:.7rem 1.2rem;border-radius:.8rem;box-shadow:0 6px 20px rgba(59,130,246,.25),0 2px 6px rgba(6,182,212,.35);transition:transform .08s ease,filter .2s ease}
+    body{background:#0b1220;color:#e5e7eb;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial}
+    .wrap{max-width:980px;margin:0 auto;padding:24px}
+    .card{background:#0f172a80;border:1px solid #1f2937;border-radius:14px;padding:16px;margin:12px 0}
+    h1{font-size:40px;margin:28px 0}
+    .small{opacity:.8;font-size:14px}
+    a,select,button,input{font:inherit}
+    .btn{background:#1f2937;border:1px solid #374151;color:#e5e7eb;padding:.65rem 1rem;border-radius:.8rem}
+    .btn-primary{background:linear-gradient(135deg,#06b6d4,#3b82f6);color:#fff;border:0;padding:.7rem 1.2rem;border-radius:.8rem;box-shadow:0 6px 20px rgba(59,130,246,.25),0 2px 6px rgba(6,182,212,.35);transition:transform .08s ease,filter .2s ease;cursor:pointer}
     .btn-primary:hover{transform:translateY(-1px);filter:brightness(1.05)}
     .btn-primary:active{transform:translateY(0);filter:brightness(.98)}
     .btn-primary[disabled]{opacity:.65;cursor:not-allowed;box-shadow:none}
     .btn-primary.is-loading{position:relative;color:transparent}
     .btn-primary.is-loading::after{content:"";position:absolute;inset:0;margin:auto;width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,255,255,.6);border-top-color:transparent;animation:spin .8s linear infinite}
     @keyframes spin{to{transform:rotate(360deg)}}
-    .wrap{max-width:980px;margin:0 auto;padding:24px}
-    .card{background:#0f172a80;border:1px solid #1f2937;border-radius:14px;padding:16px;margin:12px 0}
-    body{background:#0b1220;color:#e5e7eb;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial}
-    h1{font-size:40px;margin:28px 0}
-    .small{opacity:.8;font-size:14px}
-    a,select,button{font:inherit}
   </style>
 </head>
 <body>
   <header class="wrap" style="display:flex;justify-content:space-between;align-items:center;">
     <div style="font-weight:700">ASVAB 学习指南</div>
-    <nav><a href="/" style="color:#cbd5e1;text-decoration:none;margin-right:16px">首页</a><a href="about.html" style="color:#cbd5e1;text-decoration:none">关于</a></nav>
+    <div class="small" id="whoami"></div>
   </header>
 
   <main class="wrap">
@@ -39,12 +39,13 @@
           <option value="GS">GS 自然科学</option>
         </select>
       </label>
-      <!-- 兜底：onclick 必定生效 -->
-      <button id="load" class="btn-primary" onclick="onLoadClick()">加载整套</button>
+
+      <button id="load" class="btn-primary">加载整套</button>
+
       <span id="currentSet" class="small" style="margin-left:auto"></span>
+      <button id="logout" class="btn">退出登录</button>
     </div>
 
-    <!-- 可见状态栏 -->
     <div id="status" class="wrap small" style="padding-top:0;color:#93c5fd"></div>
 
     <div id="quiz"></div>
@@ -53,20 +54,49 @@
       <button id="submit" class="btn-primary">提交答案</button>
       <button id="toggleWrong" class="btn-primary" style="display:none">只看错题</button>
       <button id="exportWrong" class="btn-primary" style="display:none">导出错题 JSON</button>
-      <button id="retry" class="btn-primary" style="display:none" onclick="renderQuiz()">重做本套</button>
+      <button id="viewHistory" class="btn">查看成绩记录</button>
     </div>
 
     <div class="card" id="result" style="display:none"></div>
+    <div class="card" id="historyPanel" style="display:none;max-width:100%;overflow:auto"></div>
   </main>
 
-  <script>
-    // ====== 状态栏 ======
-    function setStatus(msg){ document.getElementById('status').textContent = msg || '' }
+  <!-- 全部逻辑放在一个模块脚本里，避免作用域问题 -->
+  <script type="module">
+    import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-    // ====== 全局状态 ======
+    // TODO: 替换成你自己的 URL 和 anon key
+    const supabase = createClient("YOUR_SUPABASE_URL","YOUR_SUPABASE_ANON_KEY");
+
+    // ========== 登录态检查 ==========
+    const { data:sessionData } = await supabase.auth.getSession();
+    const session = sessionData.session;
+    if (!session) {
+      location.href = "auth.html";
+      throw new Error("Not signed in");
+    }
+    const user = session.user;
+
+    // 显示姓名
+    async function showName() {
+      const { data:profile } = await supabase.from('profiles').select('full_name').eq('id', user.id).maybeSingle();
+      const name = profile?.full_name || localStorage.getItem('asvab_student_name') || user.email;
+      document.getElementById('whoami').textContent = `学员：${name}`;
+    }
+    await showName();
+
+    // 退出登录
+    document.getElementById('logout').onclick = async () => {
+      await supabase.auth.signOut();
+      location.href = 'auth.html';
+    };
+
+    // ========== UI / 状态 ==========
+    const setStatus = (t) => document.getElementById('status').textContent = t || '';
     let activeSet=null, setsOfModule=[], questions=[], wrongList=[], onlyWrong=false;
+    let examStartTs=null, examEndTs=null, lastScore=0;
 
-    // ====== 载入流程（manifest -> 套卷 JSON -> 渲染） ======
+    // ========== 载入整套 ==========
     async function onLoadClick(){
       const btn=document.getElementById('load');
       const mod=document.getElementById('module').value;
@@ -75,7 +105,6 @@
       setStatus('开始加载清单：/exams/manifest.json');
 
       try{
-        // 1) 读 manifest
         const m = await fetch('exams/manifest.json?v=1',{cache:'no-store'});
         if(!m.ok) throw new Error('manifest.json 加载失败：HTTP '+m.status);
         const manifest = await m.json();
@@ -84,11 +113,9 @@
           throw new Error(`manifest 中没有科目 ${mod} 的套卷条目`);
         }
         setsOfModule = manifest[mod];
-        activeSet = setsOfModule[0]; // 默认第一套
+        activeSet = setsOfModule[0];
 
         setStatus(`找到套卷：${activeSet.title}，开始加载 ${activeSet.file}`);
-
-        // 2) 读套卷
         const s = await fetch(`${activeSet.file}?v=1`,{cache:'no-store'});
         if(!s.ok) throw new Error(`套卷文件加载失败：HTTP ${s.status}（${activeSet.file}）`);
         const data = await s.json();
@@ -109,9 +136,9 @@
         btn.disabled=false; btn.classList.remove('is-loading'); btn.textContent='加载整套';
       }
     }
-    window.onLoadClick = onLoadClick;
+    document.getElementById('load').onclick = onLoadClick;
 
-    // ====== 渲染题目 ======
+    // ========== 渲染 ==========
     function renderQuiz(){
       const quiz = document.getElementById('quiz');
       quiz.innerHTML = questions.map((it,idx)=>{
@@ -134,28 +161,49 @@
       document.getElementById('result').style.display='none';
       document.getElementById('toggleWrong').style.display='none';
       document.getElementById('exportWrong').style.display='none';
-      document.getElementById('retry').style.display='inline-block';
+
+      // 开始计时
+      examStartTs = Date.now();
+      examEndTs = null;
+      lastScore = 0;
     }
 
-    // ====== 判分 / 错题 / 导出 ======
-    document.getElementById('submit').addEventListener('click',()=>{
+    // ========== 判分 / 错题 / 导出 JSON ==========
+    document.getElementById('submit').addEventListener('click',async ()=>{
       let score=0; wrongList=[];
       questions.forEach((it,idx)=>{
         const chosen=document.querySelector(`input[name="q${idx}"]:checked`);
-        const user=chosen?Number(chosen.value):-1;
+        const userAns=chosen?Number(chosen.value):-1;
         const exp=document.getElementById(`exp-${idx}`);
-        const ok=user===it.answer;
-        if(ok) score++; else wrongList.push({...it,user});
+        const ok=userAns===it.answer;
+        if(ok) score++; else wrongList.push({...it,user:userAns});
         exp.style.display='block';
         exp.innerHTML = ok
           ? `✅ 正确：${String.fromCharCode(65+it.answer)}。${it.explanation||''}`
-          : `❌ 你的答案：${user>=0?String.fromCharCode(65+user):'未作答'}；正确：${String.fromCharCode(65+it.answer)}。${it.explanation||''}`;
+          : `❌ 你的答案：${userAns>=0?String.fromCharCode(65+userAns):'未作答'}；正确：${String.fromCharCode(65+it.answer)}。${it.explanation||''}`;
       });
+
       const r=document.getElementById('result');
       r.style.display='block';
       r.innerHTML=`<b>得分：${score}/${questions.length}</b> · 正确率 ${(score/questions.length*100).toFixed(0)}%`;
       document.getElementById('toggleWrong').style.display='inline-block';
       document.getElementById('exportWrong').style.display=wrongList.length?'inline-block':'none';
+
+      // 结束计时 + 保存到云端
+      examEndTs = Date.now();
+      lastScore = score;
+      const payload = {
+        module: document.getElementById('module').value,
+        set_id: activeSet?.id || 'set',
+        title: activeSet?.title || '',
+        score: lastScore,
+        total: questions.length,
+        started_at: new Date(examStartTs).toISOString(),
+        ended_at:   new Date(examEndTs).toISOString(),
+        duration_sec: Math.max(0, Math.floor((examEndTs - examStartTs)/1000))
+      };
+      const { error } = await supabase.from('results').insert({ user_id: user.id, ...payload });
+      if (error) console.error('保存成绩失败：', error);
     });
 
     document.getElementById('toggleWrong').addEventListener('click', () => {
@@ -168,13 +216,54 @@
       document.getElementById('toggleWrong').textContent = onlyWrong ? '显示全部' : '只看错题';
     });
 
-
     document.getElementById('exportWrong').addEventListener('click',()=>{
       const data=wrongList.map(w=>({question:w.q,choices:w.choices,correctIndex:w.answer,userIndex:w.user??-1,explanation:w.explanation||''}));
       const blob=new Blob([JSON.stringify({exportedAt:new Date().toISOString(),exam:activeSet?.title||'',items:data},null,2)],{type:'application/json'});
       const url=URL.createObjectURL(blob); const a=document.createElement('a');
       a.href=url; a.download=`ASVAB_${(activeSet?.id||'set')}_错题_${new Date().toISOString().slice(0,10)}.json`; a.click();
       URL.revokeObjectURL(url);
+    });
+
+    // ========== 成绩记录（云端读取） ==========
+    document.getElementById('viewHistory').addEventListener('click', async () => {
+      const panel = document.getElementById('historyPanel');
+      const willShow = panel.style.display === 'none';
+      if (!willShow) { panel.style.display = 'none'; return; }
+
+      const { data:list, error } = await supabase
+        .from('results')
+        .select('module,set_id,title,score,total,created_at,duration_sec')
+        .order('created_at', { ascending:false })
+        .limit(200);
+      if (error) { panel.innerHTML = '<div class="small">加载失败。</div>'; panel.style.display='block'; return; }
+
+      if (!list.length) {
+        panel.innerHTML = '<div class="small">暂无记录。</div>'; panel.style.display='block'; return;
+      }
+      const rows = list.map(r => `
+        <tr>
+          <td>${r.module}</td>
+          <td>${r.title || r.set_id}</td>
+          <td>${r.score}/${r.total}</td>
+          <td>${r.duration_sec || 0}s</td>
+          <td>${new Date(r.created_at).toLocaleString()}</td>
+        </tr>
+      `).join('');
+      panel.innerHTML = `
+        <div style="font-weight:600;margin-bottom:8px;">成绩记录（仅本人）</div>
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr style="text-align:left;border-bottom:1px solid #334155">
+              <th style="padding:6px 4px">科目</th>
+              <th style="padding:6px 4px">套卷</th>
+              <th style="padding:6px 4px">得分</th>
+              <th style="padding:6px 4px">用时</th>
+              <th style="padding:6px 4px">时间</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+      panel.style.display = 'block';
     });
   </script>
 </body>

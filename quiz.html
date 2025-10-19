@@ -40,7 +40,7 @@
         </select>
       </label>
 
-      <button id="load" class="btn-primary">加载整套</button>
+      <button id="load" class="btn-primary" onclick="onLoadClick()">加载整套</button>
 
       <span id="currentSet" class="small" style="margin-left:auto"></span>
       <button id="logout" class="btn">退出登录</button>
@@ -66,7 +66,7 @@
     import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
     // TODO: 替换成你自己的 URL 和 anon key
-    const supabase = createClient("YOUR_SUPABASE_URL","YOUR_SUPABASE_ANON_KEY");
+    const supabase = createClient("https://tsximmhtxysoeabxwlkv.supabase.co","eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRzeGltbWh0eHlzb2VhYnh3bGt2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA4MDA2MTcsImV4cCI6MjA3NjM3NjYxN30.PQ0Fldv-vl4o_LH9niy2IbJwhcrCPbsaEM7sLEgXf8U");
 
     // ========== 登录态检查 ==========
     const { data:sessionData } = await supabase.auth.getSession();
@@ -137,6 +137,7 @@
       }
     }
     document.getElementById('load').onclick = onLoadClick;
+    window.onLoadClick = onLoadClick;  // 让内联 onclick 能调用到
 
     // ========== 渲染 ==========
     function renderQuiz(){

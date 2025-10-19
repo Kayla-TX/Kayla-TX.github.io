@@ -1,10 +1,13 @@
+cat > quiz.html <<'EOF'
 <!doctype html>
 <html lang="zh">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>AR 5题小测 · ASVAB 学习指南</title>
+  <title>ASVAB 小测（AR / MK）· 学习指南</title>
+  <meta name="description" content="ASVAB 小测：支持 AR 算术推理与 MK 数学知识，随机抽题，自动判分与解析，导出错题 JSON。">
   <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
 </head>
 <body>
   <header>
@@ -18,14 +21,31 @@
   </header>
 
   <main class="wrap">
-    <h1>AR 算术推理 · 5题小测</h1>
-    <p class="small">从题库随机抽取 5 题，单选题。提交后显示分数与解析。</p>
+    <h1>ASVAB 小测（AR / MK）</h1>
+    <div class="card" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+      <label>模块：
+        <select id="module">
+          <option value="AR">AR 算术推理</option>
+          <option value="MK">MK 数学知识</option>
+        </select>
+      </label>
+      <label>题量：
+        <select id="count">
+          <option value="5">5</option>
+          <option value="10">10</option>
+        </select>
+      </label>
+      <button id="gen" class="btn">生成试卷</button>
+      <a class="btn" href="/" style="margin-left:auto;">回首页</a>
+    </div>
 
     <div id="quiz"></div>
 
-    <div class="card" id="actions" style="display:flex;gap:12px;align-items:center;margin-top:16px;">
+    <div class="card" id="actions" style="display:none;gap:12px;align-items:center;margin-top:16px;">
       <button id="submit" class="btn">提交答案</button>
-      <button id="retry" class="btn" style="display:none;">再来一套</button>
+      <button id="toggleWrong" class="btn" style="display:none;">只看错题</button>
+      <button id="exportWrong" class="btn" style="display:none;">导出错题 JSON</button>
+      <button id="retry" class="btn" style="display:none;">重抽一套</button>
     </div>
 
     <div class="card" id="result" style="display:none;margin-top:16px;"></div>
@@ -39,3 +59,4 @@
   <script src="quiz.js"></script>
 </body>
 </html>
+EOF

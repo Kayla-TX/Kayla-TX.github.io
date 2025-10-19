@@ -160,7 +160,9 @@
       wrongList=[]; onlyWrong=false;
       document.getElementById('actions').style.display='flex';
       document.getElementById('result').style.display='none';
-      document.getElementById('toggleWrong').style.display='none';
+      const toggleWrongBtn = document.getElementById('toggleWrong');
+      toggleWrongBtn.style.display='none';
+      toggleWrongBtn.textContent = '只看错题';
       document.getElementById('exportWrong').style.display='none';
 
       // 开始计时
@@ -234,6 +236,7 @@
       const { data:list, error } = await supabase
         .from('results')
         .select('module,set_id,title,score,total,created_at,duration_sec')
+        .eq('user_id', user.id)
         .order('created_at', { ascending:false })
         .limit(200);
       if (error) { panel.innerHTML = '<div class="small">加载失败。</div>'; panel.style.display='block'; return; }
@@ -241,29 +244,52 @@
       if (!list.length) {
         panel.innerHTML = '<div class="small">暂无记录。</div>'; panel.style.display='block'; return;
       }
-      const rows = list.map(r => `
-        <tr>
-          <td>${r.module}</td>
-          <td>${r.title || r.set_id}</td>
-          <td>${r.score}/${r.total}</td>
-          <td>${r.duration_sec || 0}s</td>
-          <td>${new Date(r.created_at).toLocaleString()}</td>
-        </tr>
-      `).join('');
-      panel.innerHTML = `
-        <div style="font-weight:600;margin-bottom:8px;">成绩记录（仅本人）</div>
-        <table style="width:100%;border-collapse:collapse">
-          <thead>
-            <tr style="text-align:left;border-bottom:1px solid #334155">
-              <th style="padding:6px 4px">科目</th>
-              <th style="padding:6px 4px">套卷</th>
-              <th style="padding:6px 4px">得分</th>
-              <th style="padding:6px 4px">用时</th>
-              <th style="padding:6px 4px">时间</th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>`;
+      panel.innerHTML = '';
+
+      const titleEl = document.createElement('div');
+      titleEl.style.fontWeight = '600';
+      titleEl.style.marginBottom = '8px';
+      titleEl.textContent = '成绩记录（仅本人）';
+      panel.appendChild(titleEl);
+
+      const table = document.createElement('table');
+      table.style.width = '100%';
+      table.style.borderCollapse = 'collapse';
+
+      const thead = document.createElement('thead');
+      const headerRow = document.createElement('tr');
+      headerRow.style.textAlign = 'left';
+      headerRow.style.borderBottom = '1px solid #334155';
+      ['科目','套卷','得分','用时','时间'].forEach(text => {
+        const th = document.createElement('th');
+        th.style.padding = '6px 4px';
+        th.textContent = text;
+        headerRow.appendChild(th);
+      });
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      list.forEach(r => {
+        const row = document.createElement('tr');
+        const cells = [
+          r.module,
+          r.title || r.set_id,
+          r.score + '/' + r.total,
+          (r.duration_sec || 0) + 's',
+          new Date(r.created_at).toLocaleString()
+        ];
+        cells.forEach(value => {
+          const td = document.createElement('td');
+          td.style.padding = '6px 4px';
+          td.textContent = value;
+          row.appendChild(td);
+        });
+        tbody.appendChild(row);
+      });
+      table.appendChild(tbody);
+
+      panel.appendChild(table);
       panel.style.display = 'block';
     });
   </script>

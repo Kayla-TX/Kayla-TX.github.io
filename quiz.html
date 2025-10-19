@@ -4,8 +4,8 @@ cat > quiz.html <<'EOF'
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>ASVAB 小测（AR / MK）· 学习指南</title>
-  <meta name="description" content="ASVAB 小测：支持 AR 算术推理与 MK 数学知识，随机抽题，自动判分与解析，导出错题 JSON。">
+  <title>ASVAB 小测（AR / MK / WK / GS）· 学习指南</title>
+  <meta name="description" content="ASVAB 小测：支持 AR、MK、WK/PC、GS，随机抽题，自动判分、只看错题、导出错题 JSON。">
   <link rel="stylesheet" href="styles.css">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
 </head>
@@ -21,7 +21,7 @@ cat > quiz.html <<'EOF'
   </header>
 
   <main class="wrap">
-    <h1>ASVAB 小测（AR / MK）</h1>
+    <h1>ASVAB 小测</h1>
     <div class="card" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
       <label>模块：
         <select id="module">
@@ -30,7 +30,6 @@ cat > quiz.html <<'EOF'
           <option value="WK">WK / PC 词汇与阅读</option>
           <option value="GS">GS 自然科学</option>
         </select>
-        
       </label>
       <label>题量：
         <select id="count">
@@ -59,7 +58,8 @@ cat > quiz.html <<'EOF'
   </footer>
 
   <script>document.getElementById('y').textContent = new Date().getFullYear();</script>
-  <script src="quiz.js"></script>
+  <!-- 用版本参数防缓存 -->
+  <script src="quiz.js?v=3"></script>
 </body>
 </html>
 EOF

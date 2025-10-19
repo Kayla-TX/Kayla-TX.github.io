@@ -9,6 +9,14 @@
 </head>
 <body>
   <header>
+
+    <!-- 放到 index.html 的页眉区域 -->
+    <div style="margin-left:auto; display:flex; gap:12px; align-items:center;">
+      <span id="whoami" class="small" style="opacity:.8"></span>
+      <a id="loginBtn"  href="auth.html" class="btn" style="padding:.45rem .8rem;border-radius:.5rem;border:1px solid #334155;color:#e5e7eb;text-decoration:none;">登录</a>
+      <button id="logoutBtn" class="btn" style="display:none;padding:.45rem .8rem;border-radius:.5rem;border:1px solid #334155;background:#1f2937;color:#e5e7eb;">退出</button>
+    </div>
+
     <div class="wrap" style="display:flex; align-items:center; justify-content:space-between;">
       <div style="font-weight:600;">ASVAB 学习指南 <small style="color:#67e8f9;">MVP</small></div>
       <nav>
@@ -70,5 +78,53 @@
   <script>
     document.getElementById('y').textContent = new Date().getFullYear();
   </script>
+
+<script type="module">
+  import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+  // TODO: 替换成你自己的 Supabase 值
+  const supabase = createClient("YOUR_SUPABASE_URL", "YOUR_SUPABASE_ANON_KEY");
+
+  const whoami   = document.getElementById('whoami');
+  const loginBtn = document.getElementById('loginBtn');
+  const logoutBtn= document.getElementById('logoutBtn');
+
+  async function refreshAuthUI() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      // 未登录
+      whoami.textContent = '';
+      loginBtn.style.display  = 'inline-block';
+      logoutBtn.style.display = 'none';
+      return;
+    }
+    // 已登录 → 显示姓名
+    const uid = session.user.id;
+    const { data:profile } = await supabase.from('profiles')
+      .select('full_name').eq('id', uid).maybeSingle();
+    const name = profile?.full_name || localStorage.getItem('asvab_student_name') || session.user.email;
+    whoami.textContent = `学员：${name}`;
+    loginBtn.style.display  = 'none';
+    logoutBtn.style.display = 'inline-block';
+  }
+
+  // 退出按钮
+  logoutBtn?.addEventListener('click', async () => {
+    await supabase.auth.signOut();
+    await refreshAuthUI();
+  });
+
+  // 进入页面先刷新一次
+  refreshAuthUI();
+
+  // （可选）如果首页有 “开始练习 / 去做题” 之类的按钮，确保未登录时先去登录页：
+  document.querySelectorAll('a[href="quiz.html"], a[data-go-quiz]').forEach(a => {
+    a.addEventListener('click', async (e) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { e.preventDefault(); location.href = 'auth.html'; }
+    });
+  });
+</script>
+
 </body>
 </html>

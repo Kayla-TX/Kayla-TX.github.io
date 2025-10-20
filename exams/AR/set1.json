@@ -2,9 +2,9 @@
   "module": "AR",
   "title": "AR 模拟题·第1套",
   "questions": [
-    {"q":"80off $56，ori？","choices":["$64","$68","$70","$72"],"answer":2,"explanation":"56/0.8=70"},
-    {"q":"3 h 180 mile，ave speed？","choices":["50 mph","55 mph","60 mph","65 mph"],"answer":2,"explanation":"180/3=60"},
-    {"q":"1 gal=4 curt，5 curt=？gal","choices":["1.0","1.25","1.5","2.0"],"answer":1,"explanation":"5/4=1.25"},
-    {"q":"price 40 up to 50，price inc？","choices":["20%","22%","25%","28%"],"answer":2,"explanation":"(50-40)/40=25%"}
+    {"q":"John bought a camrea on sale that nomally costs $160. If the prise was reduced 20% during the sale, what was the sale price of the camera?","choices":["$120","$124","$128","$140"],"answer":2,"explanation":"56/0.8=70"},
+    {"q":"A subway car passees 3 stations every 10 minutes. At this rate, how many stations will it pass in one hour?","choices":["15","18","20","30"],"answer":2,"explanation":"180/3=60"},
+    {"q":"1 gal=4 curt, 5 curt=? gal","choices":["1.0","1.25","1.5","2.0"],"answer":1,"explanation":"5/4=1.25"},
+    {"q":"price 40 up to 50, price inc?","choices":["20%","22%","25%","28%"],"answer":2,"explanation":"(50-40)/40=25%"}
   ]
 }

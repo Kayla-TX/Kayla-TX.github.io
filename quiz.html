@@ -167,10 +167,16 @@
       }
 
       function startTimer(limitMinutes) {
-
         stopTimer();
-        const limitMs = Math.max(1, limitMinutes) * 60 * 1000;
-        deadlineTs = examStartTs + limitMs;
+        const parsed = Number(limitMinutes);
+        if (!Number.isFinite(parsed) || parsed <= 0) {
+          deadlineTs = null;
+          timerEl.textContent = '';
+          return;
+        }
+
+        const limitMs = parsed * 60 * 1000;
+        deadlineTs = (examStartTs || Date.now()) + limitMs;
         updateTimerDisplay();
         timerInterval = setInterval(updateTimerDisplay, 1000);
       }
@@ -224,11 +230,14 @@
         quiz.innerHTML = questions
           .map((it, idx) => {
             const name = `q${idx}`;
-            const choices = it.choices.map((t, i) => `
+            const choices = it.choices
+              .map(
+                (t, i) => `
           <label style="display:block;margin:6px 0;">
             <input type="radio" name="${name}" value="${i}"> ${String.fromCharCode(65 + i)}. ${t}
           </label>
-          )
+        `
+              )
               .join('');
             return `
 
@@ -254,6 +263,7 @@
         examEndTs = null;
         lastScore = 0;
         hasSubmitted = false;
+
         const limit = activeSet?.timeLimitMinutes ?? DEFAULT_TIME_LIMIT_MINUTES;
         startTimer(limit);
       }

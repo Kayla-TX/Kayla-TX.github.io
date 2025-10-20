@@ -97,8 +97,7 @@
 
     async function init() {
       const [{ jsPDF }] = await Promise.all([
-        import("https://esm.sh/jspdf@2.5.1"),
-        import("https://esm.sh/jspdf@2.5.1/dist/fonts/NotoSansCJKsc-normal.js")
+        import("https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js")
       ]);
 
       const { data: sessionData } = await supabase.auth.getSession();

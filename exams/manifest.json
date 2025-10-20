@@ -1,6 +1,6 @@
 {
   "AR": [
-    {"id": "set1", "title": "AR 模拟题·第1套", "file": "exams/AR/set1.json", "count": 20}
+    {"id": "set1", "title": "AR KP", "file": "exams/AR/set1.json", "count": 35}
   ],
   "MK": [
     {"id": "set1", "title": "MK 模拟题·第1套", "file": "exams/MK/set1.json", "count": 20}

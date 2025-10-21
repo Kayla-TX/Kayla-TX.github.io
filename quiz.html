@@ -343,6 +343,7 @@
 
         const payload = {
           module: document.getElementById('module').value,
+          
           set_id: activeSet?.id || 'set',
           title: activeSet?.title || '',
           score: lastScore,
@@ -368,152 +369,188 @@
       });
 
       document.getElementById('exportWrong').addEventListener('click', async () => {
-        const doc = new jsPDF({ unit: 'pt', format: 'a4' });
-        const margin = 48;
-        let y = margin;
-        const pageHeight = doc.internal.pageSize.getHeight();
-        const lineHeight = 18;
-        let fontReady = true;
+        const btn = document.getElementById('exportWrong');
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = '正在导出…';
+
         try {
-          await ensurePdfFont(doc);
-        } catch (err) {
-          fontReady = false;
-          console.error('PDF 字体加载失败：', err);
-          const msg = err?.message ? `字体加载失败：${err.message}\n导出的 PDF 可能会出现乱码。请检查网络后重试。` :
-            '字体加载失败，导出的 PDF 可能会出现乱码。请检查网络后重试。';
-          alert(msg);
-        }
+          const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+          const margin = 48;
+          const pageWidth = doc.internal.pageSize.getWidth();
+          const pageHeight = doc.internal.pageSize.getHeight();
+          const printableWidth = pageWidth - margin * 2;
+          const pxPerPt = 96 / 72;
+          let y = margin;
+          const baseLineHeight = 18;
+          let fontReady = true;
 
-        if (!fontReady) {
-          doc.setFont('helvetica', 'normal');
-        }
-
-        doc.setTextColor(20);
-
-        const addText = (text, options = {}) => {
-          const { fontSize = 12, gap = lineHeight } = options;
-          doc.setFontSize(fontSize);
-          if (fontReady && PDF_FONT_NAME) {
-            doc.setFont(PDF_FONT_NAME, 'normal');
-          } else {
+          try {
+            await ensurePdfFont(doc);
+          } catch (err) {
+            fontReady = false;
+            console.error('PDF 字体加载失败：', err);
+            alert(
+              err?.message
+                ? `字体加载失败：${err.message}\n将使用备用方案导出，内容会以图片嵌入，仍可正常阅读。`
+                : '字体加载失败，将使用备用方案导出，内容会以图片嵌入，仍可正常阅读。'
+            );
             doc.setFont('helvetica', 'normal');
           }
-          const lines = doc.splitTextToSize(text, doc.internal.pageSize.getWidth() - margin * 2);
-          lines.forEach((line) => {
-            if (y + gap > pageHeight - margin) {
+
+          doc.setTextColor(20);
+
+          const fallbackCanvas = document.createElement('canvas');
+          const fallbackCtx = fallbackCanvas.getContext('2d');
+
+          const ensureSpace = (needed) => {
+            if (y + needed > pageHeight - margin) {
               doc.addPage();
               y = margin;
-              doc.setFontSize(fontSize);
-              if (fontReady && PDF_FONT_NAME) {
-                doc.setFont(PDF_FONT_NAME, 'normal');
-              } else {
-                doc.setFont('helvetica', 'normal');
+            }
+          };
+
+          const wrapFallbackText = (text, fontSize) => {
+            fallbackCtx.font = `${fontSize}px sans-serif`;
+            const maxWidthPx = printableWidth * pxPerPt;
+            const lines = [];
+            let current = '';
+            let lastBreak = -1;
+
+            for (let i = 0; i < text.length; i++) {
+              const ch = text[i];
+              const tentative = current + ch;
+              const width = fallbackCtx.measureText(tentative).width;
+              const breakable = /\s/.test(ch) || /[，。,、；；！？]/.test(ch);
+
+              if (width > maxWidthPx && current) {
+                if (lastBreak > 0) {
+                  const line = current.slice(0, lastBreak);
+                  lines.push(line.trimEnd());
+                  current = current.slice(lastBreak).trimStart() + ch;
+                } else {
+                  lines.push(current.trimEnd());
+                  current = ch;
+                }
+                lastBreak = -1;
+                continue;
+              }
+
+              current = tentative;
+              if (breakable) {
+                lastBreak = current.length;
               }
             }
-            doc.text(line, margin, y);
-            y += gap;
-          });
-        };
 
-        const examTitle = activeSet?.title || 'ASVAB 模拟题';
-        const examDate = examEndTs ? new Date(examEndTs) : new Date();
-        addText(`错题报告 - ${examTitle}`, { fontSize: 18, gap: 26 });
-        addText(`学员姓名：${studentName}`, { fontSize: 14 });
-        addText(`考试日期：${examDate.toLocaleDateString()} ${examDate.toLocaleTimeString()}`, { fontSize: 14 });
-        addText(`考试成绩：${lastScore}/${questions.length}`, { fontSize: 14, gap: 22 });
-
-        if (!wrongList.length) {
-          addText('恭喜，本次全部答对，没有错题记录。');
-        } else {
-          wrongList.forEach((w, idx) => {
-            const correct = String.fromCharCode(65 + (w.answer ?? 0));
-            const userAns = w.user != null && w.user >= 0 ? String.fromCharCode(65 + w.user) : '未作答';
-            addText(`${idx + 1}. ${w.q}`, { fontSize: 13, gap: 20 });
-            addText(`正确答案：${correct}    我的答案：${userAns}`, { fontSize: 12 });
-            if (w.explanation) {
-              addText(`解析：${w.explanation}`, { fontSize: 12 });
+            if (current) {
+              lines.push(current.trimEnd());
             }
-            if (w.choices?.length) {
-              w.choices.forEach((choice, cIdx) => {
-                const label = String.fromCharCode(65 + cIdx);
-                addText(`${label}. ${choice}`, { fontSize: 11, gap: 16 });
+
+            return lines.length ? lines : [''];
+          };
+
+          const renderLineAsImage = (line, fontSize) => {
+            fallbackCtx.font = `${fontSize}px sans-serif`;
+            const ratio = window.devicePixelRatio || 1;
+            const textWidthPx = Math.max(1, fallbackCtx.measureText(line).width);
+            const textHeightPx = fontSize * 1.35;
+            fallbackCanvas.width = Math.ceil((textWidthPx + 6) * ratio);
+            fallbackCanvas.height = Math.ceil((textHeightPx + 6) * ratio);
+
+            fallbackCtx.save();
+            fallbackCtx.scale(ratio, ratio);
+            fallbackCtx.clearRect(0, 0, fallbackCanvas.width, fallbackCanvas.height);
+            fallbackCtx.font = `${fontSize}px sans-serif`;
+            fallbackCtx.fillStyle = '#141414';
+            fallbackCtx.textBaseline = 'top';
+            fallbackCtx.fillText(line, 3, 3);
+            fallbackCtx.restore();
+
+            return {
+              dataUrl: fallbackCanvas.toDataURL('image/png'),
+              widthPt: (textWidthPx + 6) / pxPerPt,
+              heightPt: (textHeightPx + 6) / pxPerPt
+            };
+          };
+
+          const addParagraph = (text, options = {}) => {
+            const { fontSize = 12, gap = baseLineHeight } = options;
+            const effectiveGap = Math.max(gap, fontSize * 1.45);
+            const content = String(text ?? '');
+            const pieces = content.split(/\r?\n/);
+
+            pieces.forEach((part, partIdx) => {
+              const lines = fontReady
+                ? (() => {
+                    doc.setFontSize(fontSize);
+                    doc.setFont(fontReady ? PDF_FONT_NAME : 'helvetica', 'normal');
+                    return doc.splitTextToSize(part, printableWidth);
+                  })()
+                : wrapFallbackText(part, fontSize);
+
+              const outputLines = lines.length ? lines : [''];
+
+              outputLines.forEach((line) => {
+                if (fontReady) {
+                  ensureSpace(effectiveGap);
+                  doc.setFontSize(fontSize);
+                  doc.setFont(PDF_FONT_NAME, 'normal');
+                  doc.text(line, margin, y + fontSize * 0.85);
+                  y += effectiveGap;
+                } else {
+                  const { dataUrl, widthPt, heightPt } = renderLineAsImage(line, fontSize);
+                  const lineSpacing = Math.max(effectiveGap, heightPt);
+                  ensureSpace(lineSpacing);
+                  doc.addImage(dataUrl, 'PNG', margin, y, widthPt, heightPt);
+                  y += lineSpacing;
+                }
               });
-            }
-            y += 6;
-          });
+
+              if (partIdx < pieces.length - 1) {
+                ensureSpace(effectiveGap);
+                y += effectiveGap;
+              }
+            });
+          };
+
+          const examTitle = activeSet?.title || 'ASVAB 模拟题';
+          const examDate = examEndTs ? new Date(examEndTs) : new Date();
+          addParagraph(`错题报告 - ${examTitle}`, { fontSize: 18, gap: 26 });
+          addParagraph(`学员姓名：${studentName}`, { fontSize: 14 });
+          addParagraph(`考试日期：${examDate.toLocaleDateString()} ${examDate.toLocaleTimeString()}`, { fontSize: 14 });
+          addParagraph(`考试成绩：${lastScore}/${questions.length}`, { fontSize: 14, gap: 22 });
+
+          if (!wrongList.length) {
+            addParagraph('恭喜，本次全部答对，没有错题记录。');
+          } else {
+            wrongList.forEach((w, idx) => {
+              const correct = String.fromCharCode(65 + (w.answer ?? 0));
+              const userAns = w.user != null && w.user >= 0 ? String.fromCharCode(65 + w.user) : '未作答';
+              addParagraph(`${idx + 1}. ${w.q}`, { fontSize: 13, gap: 20 });
+              addParagraph(`正确答案：${correct}    我的答案：${userAns}`, { fontSize: 12 });
+              if (w.explanation) {
+                addParagraph(`解析：${w.explanation}`, { fontSize: 12 });
+              }
+              if (Array.isArray(w.choices) && w.choices.length) {
+                w.choices.forEach((choice, cIdx) => {
+                  const label = String.fromCharCode(65 + cIdx);
+                  addParagraph(`${label}. ${choice}`, { fontSize: 11, gap: 16 });
+                });
+              }
+              y += 6;
+            });
+          }
+
+          const fileDate = examDate.toISOString().slice(0, 10);
+          doc.save(`ASVAB_${activeSet?.id || 'set'}_错题_${fileDate}.pdf`);
+        } catch (err) {
+          console.error('导出错题 PDF 失败：', err);
+          alert('导出错题 PDF 失败：' + err.message);
+        } finally {
+          btn.disabled = false;
+          btn.textContent = originalText;
         }
-
-        doc.save(`ASVAB_${activeSet?.id || 'set'}_错题_${examDate.toISOString().slice(0, 10)}.pdf`);
       });
-
-      document.getElementById('exportWrong').addEventListener('click', async () => {
-  // 仅生成英文 PDF，避免外部中文字体加载失败导致“没反应”
-  const { jsPDF } = await import("https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm");
-  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
-
-  const margin = 48;
-  const pageW = doc.internal.pageSize.getWidth();
-  const pageH = doc.internal.pageSize.getHeight();
-  const lineH = 18;
-  let y = margin;
-
-  // 字体用浏览器内置英文字体，稳定不需要额外下载
-  const setFont = (size = 12) => { doc.setFont('helvetica', 'normal'); doc.setFontSize(size); };
-
-  const addText = (text, size = 12, gap = lineH) => {
-    setFont(size);
-    const lines = doc.splitTextToSize(text, pageW - margin * 2);
-    for (const ln of lines) {
-      if (y + gap > pageH - margin) { doc.addPage(); y = margin; setFont(size); }
-      doc.text(ln, margin, y);
-      y += gap;
-    }
-  };
-
-  const examTitle = (activeSet?.title || 'ASVAB Practice');
-  const examDate = examEndTs ? new Date(examEndTs) : new Date();
-
-  // Header（英文）
-  addText(`Incorrect Questions Report — ${examTitle}`, 18, 26);
-  addText(`Student: ${studentName || 'N/A'}`, 13);
-  addText(`Date: ${examDate.toLocaleDateString()} ${examDate.toLocaleTimeString()}`, 13);
-  addText(`Score: ${lastScore}/${questions.length}`, 13, 22);
-
-  if (!wrongList.length) {
-    addText('Great job! No incorrect questions in this attempt.', 12);
-  } else {
-    wrongList.forEach((w, idx) => {
-      const correct = String.fromCharCode(65 + (w.answer ?? 0));
-      const userAns = (w.user != null && w.user >= 0) ? String.fromCharCode(65 + w.user) : 'Not answered';
-
-      addText(`${idx + 1}. ${w.q}`, 13, 20);
-      addText(`Correct: ${correct}    Your answer: ${userAns}`, 12);
-      if (w.explanation) addText(`Explanation: ${w.explanation}`, 12);
-
-      if (Array.isArray(w.choices) && w.choices.length) {
-        w.choices.forEach((choice, cIdx) => {
-          addText(`${String.fromCharCode(65 + cIdx)}. ${choice}`, 11, 16);
-        });
-      }
-      y += 6; // small gap
-    });
-  }
-
-  // —— 关键：用 Blob + a[download]，提升兼容性，避免有时 doc.save() 被拦截 —— //
-  const blob = doc.output('blob');
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  const yyyy_mm_dd = examDate.toISOString().slice(0, 10);
-  a.href = url;
-  a.download = `ASVAB_${activeSet?.id || 'set'}_Incorrect_${yyyy_mm_dd}.pdf`;
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => {
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, 0);
-});
-
 
       document.getElementById('load').onclick = onLoadClick;
       window.onLoadClick = onLoadClick;

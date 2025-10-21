@@ -92,7 +92,7 @@
     const ensurePdfFont = async (doc) => {
       const fontList = doc.getFontList?.() || {};
       if (fontList[PDF_FONT_NAME]) {
-        doc.setFont(PDF_FONT_NAME, 'normal');
+        doc.setFont(PDF_FONT_NAME, 'normal', PDF_FONT_ENCODING);
         return;
       }
 
@@ -121,8 +121,8 @@
       }
 
       doc.addFileToVFS(PDF_FONT_FILE, cachedFontData);
-      doc.addFont(PDF_FONT_FILE, PDF_FONT_NAME, 'normal', 'Identity-H');
-      doc.setFont(PDF_FONT_NAME, 'normal');
+      doc.addFont(PDF_FONT_FILE, PDF_FONT_NAME, 'normal', PDF_FONT_ENCODING);
+      doc.setFont(PDF_FONT_NAME, 'normal', PDF_FONT_ENCODING);
     };
 
     const supabase = createClient(
@@ -483,7 +483,7 @@
               const lines = fontReady
                 ? (() => {
                     doc.setFontSize(fontSize);
-                    doc.setFont(fontReady ? PDF_FONT_NAME : 'helvetica', 'normal');
+                    doc.setFont(PDF_FONT_NAME, 'normal', PDF_FONT_ENCODING);
                     return doc.splitTextToSize(part, printableWidth);
                   })()
                 : wrapFallbackText(part, fontSize);
@@ -494,7 +494,7 @@
                 if (fontReady) {
                   ensureSpace(effectiveGap);
                   doc.setFontSize(fontSize);
-                  doc.setFont(PDF_FONT_NAME, 'normal');
+                  doc.setFont(PDF_FONT_NAME, 'normal', PDF_FONT_ENCODING);
                   doc.text(line, margin, y + fontSize * 0.85);
                   y += effectiveGap;
                 } else {

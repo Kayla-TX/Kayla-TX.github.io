@@ -4,7 +4,22 @@
   "questions": [
     {"q":"John bought a camrea on sale that nomally costs $160. If the prise was reduced 20% during the sale, what was the sale price of the camera?","choices":["$120","$124","$128","$140"],"answer":2,"explanation":"56/0.8=70"},
     {"q":"A subway car passees 3 stations every 10 minutes. At this rate, how many stations will it pass in one hour?","choices":["15","18","20","30"],"answer":2,"explanation":"180/3=60"},
-    {"q":"1 gal=4 curt, 5 curt=? gal","choices":["1.0","1.25","1.5","2.0"],"answer":1,"explanation":"5/4=1.25"},
-    {"q":"price 40 up to 50, price inc?","choices":["20%","22%","25%","28%"],"answer":2,"explanation":"(50-40)/40=25%"}
+    {"q":"On a certain map, 3/4 inch represents one mile. What distance, in miles, is represented by 1 3/4 inches?","choices":["1 1/2","2 1/3","2 1/2","5 1/4"],"answer":1,"explanation":"5/4=1.25"},
+    {"q":"A certain box contains baseballs and golf balls. If the ratio of base balls to golf balls is 2:3 and there are 30 baseballs in the box, how many golf balls are in the box?","choices":["18","20","36","45"],"answer":2,"explanation":"(50-40)/40=25%"},
+    {"q":"Four people shared a taxi to the airport. The fare was $36.00, and they gave the driver a tip equal to 25% of the fare. If they equally shared the cost of the fare and tip, how much did each person pay?","choices":["$9.75","$10.25","10.75","11.25"],"answer":2,"explanation":"(50-40)/40=25%"},
+    {"q":"If a car travels 1/100 of a kilometer each second, how many kilometers does it travel in an hour?","choices":["36","60","72","100"],"answer":2,"explanation":"(50-40)/40=25%"},
+    {"q":"20 - (-5) = ","choices":["-25","25","15","-15"],"answer":2,"explanation":"(50-40)/40=25%"},
+    {"q":"Ms. Smith drove a total of 700 miles on a business trip. If her car averraged 35 miles per gallon of gasoline and gasline cost $1.25 per gallon, what was the cost in dollars of the gasoline for the trip?","choices":["$20.00","$24.00","$25.00","$40.00"],"answer":2,"explanation":"(50-40)/40=25%"},
+    {"q":"After eating 25% of the jelly beans, Brett had 72 left. How many jelly beans did Brett have originally? ","choices":["90","94","95","96"],"answer":2,"explanation":"(50-40)/40=25%"},
+    {"q":"A student finhishes the first half of an exam in 2/3 the time it takes him to finhish the second half. If the entire exam takes him an hour, how many minutes does he spend on the first half of the exam? ","choices":["20","24","27","36"],"answer":2,"explanation":"(50-40)/40=25%"},
+    {"q":"A 25-ounce solution is 20% alcohol. If 50 ounces of water are added to it, what percent of the new solution is alcohol?","choices":["6 2/3%","7 1/2%","10%","13 1/3%"],"answer":2,"explanation":"(50-40)/40=25%"},
+    {"q":"Marty has exactly 5 blue pens, 6 black pens, and 4 res pens in his backpack, what is the probability that the pen is either red or black? ","choices":["2/3","3/5","2/5","1/3"],"answer":2,"explanation":"(50-40)/40=25%"},
+    {"q":"From 1980 through 1990, the population of Country X incresed by 100%. From 1990 to 2000. the population incresed by 50%. What was the combined increse for the period 1980-2000?","choices":["150%","166 2/3%","175%","200%"],"answer":2,"explanation":"(50-40)/40=25%"},
+    {"q":"If a worker earns $200 for the first 40 hours of work in a week and then is paid one-and-one-half times her regular rate of any additional hours, how many hours must she work to make $230 in a week?","choices":["43","44","45","46"],"answer":2,"explanation":"(50-40)/40=25%"},
+    {"q":"If 50% of x is 150, what is 75% of x?","choices":["225","250","275","300"],"answer":2,"explanation":"(50-40)/40=25%"},
+    {"q":"The total fare for two adults and three children on an excursion boat is $14. If each child's fare is one half of each adult's fare, what is the adult fare?","choices":["$2.00","$3.00","$3.50","$4.00"],"answer":2,"explanation":"(50-40)/40=25%"},
+    {"q":"What is the prime factorization of 140?","choices":["2*70","2*3*5*7","2*2*5*7","2*2*2*5*7"],"answer":2,"explanation":"(50-40)/40=25%"},
+    {"q":"20 - (-5) = ","choices":["-25","25","15","-15"],"answer":2,"explanation":"(50-40)/40=25%"}
+
   ]
 }

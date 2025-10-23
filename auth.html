@@ -17,19 +17,30 @@
 </head>
 <body>
   <div class="wrap">
-    <h2>登录 / 注册</h2>
-    <div class="card">
-      <label>邮箱</label>
-      <input id="email" type="email" placeholder="you@example.com" />
-      <label>密码</label>
-      <input id="password" type="password" placeholder="至少 6 位" />
-      <label>真实姓名（注册时必填）</label>
-      <input id="fullName" type="text" placeholder="张三" />
-      <button id="btnSignup">注册并进入</button>
-      <div style="height:8px"></div>
+    <h2 style="margin-bottom:24px;">账号登录 / 注册</h2>
+
+    <div class="card" style="margin-bottom:24px;">
+      <h3 style="margin-top:0;margin-bottom:12px;">已有账号登录</h3>
+      <label for="loginEmail">邮箱</label>
+      <input id="loginEmail" type="email" placeholder="you@example.com" autocomplete="email" />
+      <label for="loginPassword">密码</label>
+      <input id="loginPassword" type="password" placeholder="至少 6 位" autocomplete="current-password" />
       <button id="btnSignin">登录</button>
-      <div class="msg" id="msg"></div>
-      <p class="small" style="opacity:.8">登录成功后将跳转到 <code>quiz.html</code></p>
+      <div class="msg" id="loginMsg"></div>
+      <p class="small" style="opacity:.7;margin-top:12px;">登录成功后将跳转到 <code>quiz.html</code></p>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;margin-bottom:12px;">首次注册</h3>
+      <label for="signupEmail">邮箱</label>
+      <input id="signupEmail" type="email" placeholder="you@example.com" autocomplete="email" />
+      <label for="signupPassword">密码</label>
+      <input id="signupPassword" type="password" placeholder="至少 6 位" autocomplete="new-password" />
+      <label for="signupFullName">真实姓名（注册时必填）</label>
+      <input id="signupFullName" type="text" placeholder="张三" autocomplete="name" />
+      <button id="btnSignup">注册并进入</button>
+      <div class="msg" id="signupMsg"></div>
+      <p class="small" style="opacity:.7;margin-top:12px;">我们会保存真实姓名，用于展示在练习页面。</p>
     </div>
   </div>
 
@@ -39,8 +50,10 @@
     // TODO: 替换成你自己的 URL 和 anon key
     const supabase = createClient("https://tsximmhtxysoeabxwlkv.supabase.co","eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRzeGltbWh0eHlzb2VhYnh3bGt2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA4MDA2MTcsImV4cCI6MjA3NjM3NjYxN30.PQ0Fldv-vl4o_LH9niy2IbJwhcrCPbsaEM7sLEgXf8U");
 
-    const $ = s => document.querySelector(s);
-    const msg = t => $("#msg").textContent = t || "";
+    const $ = (s) => document.querySelector(s);
+    const setText = (el, t) => {
+      if (el) el.textContent = t || "";
+    };
 
     async function ensureProfile(userId, fullName){
       const { data:ex } = await supabase.from('profiles')
@@ -53,29 +66,57 @@
     }
 
     $("#btnSignup").onclick = async () => {
-      const email = $("#email").value.trim();
-      const password = $("#password").value.trim();
-      const full = $("#fullName").value.trim();
-      if (!email || !password || !full) return msg("请填写邮箱、密码和真实姓名");
-      msg("正在注册…");
-      const { data, error } = await supabase.auth.signUp({ email, password });
-      if (error) return msg("注册失败：" + error.message);
+      const email = $("#signupEmail").value.trim();
+      const password = $("#signupPassword").value.trim();
+      const full = $("#signupFullName").value.trim();
+      const msgEl = $("#signupMsg");
+      if (!email || !password || !full) {
+        return setText(msgEl, "请填写邮箱、密码和真实姓名");
+      }
+      setText(msgEl, "正在注册…");
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { full_name: full }
+        }
+      });
+      if (error) {
+        return setText(msgEl, "注册失败：" + error.message);
+      }
       const user = data.user;
-      await ensureProfile(user.id, full);
+      if (user?.id) {
+        await ensureProfile(user.id, full);
+      }
       localStorage.setItem('asvab_student_name', full);
       location.href = "quiz.html";
     };
 
     $("#btnSignin").onclick = async () => {
-      const email = $("#email").value.trim();
-      const password = $("#password").value.trim();
-      if (!email || !password) return msg("请填写邮箱和密码");
-      msg("正在登录…");
+      const email = $("#loginEmail").value.trim();
+      const password = $("#loginPassword").value.trim();
+      const msgEl = $("#loginMsg");
+      if (!email || !password) {
+        return setText(msgEl, "请填写邮箱和密码");
+      }
+      setText(msgEl, "正在登录…");
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) return msg("登录失败：" + error.message);
-      const uid = data.user.id;
-      const { data:profile } = await supabase.from('profiles').select('full_name').eq('id', uid).maybeSingle();
-      if (profile?.full_name) localStorage.setItem('asvab_student_name', profile.full_name);
+      if (error) {
+        return setText(msgEl, "登录失败：" + error.message);
+      }
+      const user = data.user;
+      const uid = user?.id;
+      if (uid) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', uid)
+          .maybeSingle();
+        const profileName = profile?.full_name || user?.user_metadata?.full_name;
+        if (profileName) {
+          localStorage.setItem('asvab_student_name', profileName);
+        }
+      }
       location.href = "quiz.html";
     };
 

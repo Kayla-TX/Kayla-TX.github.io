@@ -1,4 +1,3 @@
-cat > quiz.js <<'EOF'
 console.log("[quiz] quiz.js loaded"); // 调试：看控制台是否打印
 
 // 题库
@@ -113,4 +112,3 @@ window.addEventListener('DOMContentLoaded', ()=>{
   });
   document.getElementById('retry').addEventListener('click', generate);
 });
-EOF

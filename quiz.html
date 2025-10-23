@@ -56,11 +56,14 @@
 
     <div id="quiz"></div>
 
-    <div class="card" id="actions" style="display:none;gap:12px;align-items:center">
+    <div class="card" id="actions" style="display:none;gap:12px;align-items:center;flex-wrap:wrap">
       <button id="submit" class="btn-primary">提交答案</button>
       <button id="toggleWrong" class="btn-primary" style="display:none">只看错题</button>
       <button id="exportWrong" class="btn-primary" style="display:none">导出错题 PDF</button>
+      <button id="exportFull" class="btn-primary" style="display:none">导出整套 PDF</button>
       <button id="viewHistory" class="btn">查看成绩记录</button>
+      <button id="scrollTop" class="btn">回到顶部</button>
+      <button id="scrollBottom" class="btn">跳到底部</button>
     </div>
 
     <div class="card" id="result" style="display:none"></div>
@@ -73,6 +76,7 @@
     const PDF_FONT_NAME = 'NotoSansCJKsc';
     const PDF_FONT_FILE = 'NotoSansSC-Regular.otf';
     const PDF_FONT_URL = 'https://cdn.jsdelivr.net/npm/@l-hammer/noto-sans-sc@0.0.3/NotoSansSC-Regular.otf';
+    const PDF_FONT_ENCODING = 'Identity-H';
 
     let cachedFontData = null;
     let fontLoadingPromise = null;
@@ -87,6 +91,14 @@
       }
       return btoa(binary);
     };
+
+    const escapeHtml = (value) =>
+      String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 
 
     const ensurePdfFont = async (doc) => {
@@ -133,6 +145,176 @@
     async function init() {
       const { jsPDF } = await import("https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm");
 
+      const createPdfContext = async () => {
+        const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+        doc.setTextColor(20);
+
+        const margin = 48;
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const printableWidth = pageWidth - margin * 2;
+        const pxPerPt = 96 / 72;
+        let y = margin;
+        let fontReady = true;
+        let fontError = null;
+
+        const fallbackCanvas = document.createElement('canvas');
+        const fallbackCtx = fallbackCanvas.getContext && fallbackCanvas.getContext('2d');
+
+        try {
+          await ensurePdfFont(doc);
+        } catch (err) {
+          fontReady = false;
+          fontError = err;
+          doc.setFont('helvetica', 'normal');
+        }
+
+        const ensureSpace = (needed) => {
+          if (y + needed > pageHeight - margin) {
+            doc.addPage();
+            y = margin;
+          }
+        };
+
+        const wrapFallbackText = (text, fontSize) => {
+          if (!fallbackCtx) return [text];
+          fallbackCtx.font = `${fontSize}px sans-serif`;
+          const maxWidthPx = printableWidth * pxPerPt;
+          const lines = [];
+          let current = '';
+          let lastBreak = -1;
+
+          for (let i = 0; i < text.length; i++) {
+            const ch = text[i];
+            const tentative = current + ch;
+            const width = fallbackCtx.measureText(tentative).width;
+            const breakable = /\s/.test(ch) || /[，。,、；；！？]/.test(ch);
+
+            if (width > maxWidthPx && current) {
+              if (lastBreak > 0) {
+                const line = current.slice(0, lastBreak);
+                lines.push(line.trimEnd());
+                current = current.slice(lastBreak).trimStart() + ch;
+              } else {
+                lines.push(current.trimEnd());
+                current = ch;
+              }
+              lastBreak = -1;
+              continue;
+            }
+
+            current = tentative;
+            if (breakable) {
+              lastBreak = current.length;
+            }
+          }
+
+          if (current) {
+            lines.push(current.trimEnd());
+          }
+
+          return lines.length ? lines : [''];
+        };
+
+        const renderLineAsImage = (line, fontSize) => {
+          if (!fallbackCtx) {
+            return { dataUrl: '', widthPt: printableWidth, heightPt: fontSize * 1.45 };
+          }
+          fallbackCtx.font = `${fontSize}px sans-serif`;
+          const ratio = window.devicePixelRatio || 1;
+          const textWidthPx = Math.max(1, fallbackCtx.measureText(line).width);
+          const textHeightPx = fontSize * 1.35;
+          fallbackCanvas.width = Math.ceil((textWidthPx + 6) * ratio);
+          fallbackCanvas.height = Math.ceil((textHeightPx + 6) * ratio);
+
+          fallbackCtx.save();
+          fallbackCtx.scale(ratio, ratio);
+          fallbackCtx.clearRect(0, 0, fallbackCanvas.width, fallbackCanvas.height);
+          fallbackCtx.font = `${fontSize}px sans-serif`;
+          fallbackCtx.fillStyle = '#141414';
+          fallbackCtx.textBaseline = 'top';
+          fallbackCtx.fillText(line, 3, 3);
+          fallbackCtx.restore();
+
+          return {
+            dataUrl: fallbackCanvas.toDataURL('image/png'),
+            widthPt: (textWidthPx + 6) / pxPerPt,
+            heightPt: (textHeightPx + 6) / pxPerPt
+          };
+        };
+
+        const addParagraph = (text, options = {}) => {
+          const { fontSize = 12, gap = 18 } = options;
+          const effectiveGap = Math.max(gap, fontSize * 1.45);
+          const content = String(text ?? '');
+          const pieces = content.split(/\r?\n/);
+
+          pieces.forEach((part, partIdx) => {
+            const lines = fontReady
+              ? (() => {
+                  doc.setFontSize(fontSize);
+                  doc.setFont(PDF_FONT_NAME, 'normal', PDF_FONT_ENCODING);
+                  return doc.splitTextToSize(part, printableWidth);
+                })()
+              : wrapFallbackText(part, fontSize);
+
+            const outputLines = lines.length ? lines : [''];
+
+            outputLines.forEach((line) => {
+              if (fontReady) {
+                ensureSpace(effectiveGap);
+                doc.setFontSize(fontSize);
+                doc.setFont(PDF_FONT_NAME, 'normal', PDF_FONT_ENCODING);
+                doc.text(line, margin, y + fontSize * 0.85);
+                y += effectiveGap;
+              } else {
+                const { dataUrl, widthPt, heightPt } = renderLineAsImage(line, fontSize);
+                const lineSpacing = Math.max(effectiveGap, heightPt);
+                ensureSpace(lineSpacing);
+                if (dataUrl) {
+                  doc.addImage(dataUrl, 'PNG', margin, y, widthPt, heightPt);
+                }
+                y += lineSpacing;
+              }
+            });
+
+            if (partIdx < pieces.length - 1) {
+              ensureSpace(effectiveGap);
+              y += effectiveGap;
+            }
+          });
+        };
+
+        const addSpacer = (gap = 12) => {
+          const amount = Math.max(0, gap);
+          if (!amount) return;
+          ensureSpace(amount);
+          y += amount;
+        };
+
+        return {
+          doc,
+          addParagraph,
+          addSpacer,
+          ensureSpace,
+          save: (fileName) => doc.save(fileName),
+          isFontReady: () => fontReady,
+          getFontError: () => fontError,
+          margin,
+          printableWidth
+        };
+      };
+
+      const notifyFontFallback = (err) => {
+        if (!err) return;
+        console.error('PDF 字体加载失败：', err);
+        alert(
+          err?.message
+            ? `字体加载失败：${err.message}\n将使用备用方案导出，内容会以图片嵌入，仍可正常阅读。`
+            : '字体加载失败，将使用备用方案导出，内容会以图片嵌入，仍可正常阅读。'
+        );
+      };
+
       const { data: sessionData } = await supabase.auth.getSession();
       const session = sessionData.session;
       if (!session) {
@@ -148,18 +330,42 @@
       let timerInterval = null, deadlineTs = null, hasSubmitted = false;
       const DEFAULT_TIME_LIMIT_MINUTES = 60;
       const timerEl = document.getElementById('timer');
+      const moduleNameMap = {
+        AR: 'AR KP',
+        MK: 'MK 数学知识',
+        WK: 'WK / PC 词汇与阅读',
+        GS: 'GS 自然科学'
+      };
+      const historyPanel = document.getElementById('historyPanel');
+      const viewHistoryBtn = document.getElementById('viewHistory');
+      let historyVisible = false;
+      let historyLoaded = false;
 
       async function showName() {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('full_name')
-          .eq('id', user.id)
-          .maybeSingle();
-        studentName = profile?.full_name
-          || localStorage.getItem('asvab_student_name')
-          || user.user_metadata?.full_name
-          || "未填写姓名";
-        document.getElementById('whoami').textContent = `学员：${studentName}`;
+        const whoamiEl = document.getElementById('whoami');
+        if (!whoamiEl) return;
+        const stored = localStorage.getItem('asvab_student_name');
+        const metaName = user.user_metadata?.full_name || (user.email ? user.email.split('@')[0] : '');
+        studentName = stored || metaName || '未填写姓名';
+        whoamiEl.textContent = `学员：${studentName}`;
+
+        try {
+          const { data: profile, error } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', user.id)
+            .maybeSingle();
+
+          if (error) throw error;
+
+          if (profile?.full_name) {
+            studentName = profile.full_name;
+            localStorage.setItem('asvab_student_name', studentName);
+            whoamiEl.textContent = `学员：${studentName}`;
+          }
+        } catch (err) {
+          console.warn('获取学员姓名失败：', err);
+        }
       }
       await showName();
 
@@ -185,8 +391,6 @@
 
       function updateTimerDisplay() {
         if (!deadlineTs) {
-          timerEl.textContent = '';
-          return;
         }
         const diff = deadlineTs - Date.now();
         if (diff <= 0) {
@@ -212,7 +416,93 @@
         updateTimerDisplay();
         timerInterval = setInterval(updateTimerDisplay, 1000);
       }
-    
+
+      const formatDateTime = (iso) => {
+        if (!iso) return '-';
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return '-';
+        return d.toLocaleString();
+      };
+
+      const formatDurationText = (sec) => {
+        if (!Number.isFinite(sec)) return '-';
+        const total = Math.max(0, Math.floor(sec));
+        const minutes = Math.floor(total / 60);
+        const seconds = total % 60;
+        if (minutes) {
+          return `${minutes}分${seconds}秒`;
+        }
+        return `${seconds}秒`;
+      };
+
+      const refreshHistory = async (force = false) => {
+        if (!historyPanel || !viewHistoryBtn) return;
+        if (historyLoaded && !force) return;
+
+        historyPanel.innerHTML = '<div class="small">正在加载成绩记录…</div>';
+        try {
+          viewHistoryBtn.disabled = true;
+          const { data, error } = await supabase
+            .from('results')
+            .select('module,set_id,title,score,total,started_at,ended_at,duration_sec')
+            .eq('user_id', user.id)
+            .order('started_at', { ascending: false })
+            .limit(100);
+
+          if (error) throw error;
+
+          historyLoaded = true;
+          if (!data || !data.length) {
+            historyPanel.innerHTML = '<div class="small">暂无成绩记录。</div>';
+            return;
+          }
+
+          const rows = data
+            .map((row, idx) => {
+              const moduleLabel = moduleNameMap[row.module] || row.module || '-';
+              const titleText = row.title || row.set_id || '';
+              const scoreText = `${row.score ?? 0}/${row.total ?? 0}`;
+              const durationText = formatDurationText(row.duration_sec);
+              return `
+                <tr>
+                  <td style="padding:8px 12px;border-bottom:1px solid #1f2937;">${idx + 1}</td>
+                  <td style="padding:8px 12px;border-bottom:1px solid #1f2937;">${escapeHtml(moduleLabel)}</td>
+                  <td style="padding:8px 12px;border-bottom:1px solid #1f2937;">${escapeHtml(titleText)}</td>
+                  <td style="padding:8px 12px;border-bottom:1px solid #1f2937;">${escapeHtml(scoreText)}</td>
+                  <td style="padding:8px 12px;border-bottom:1px solid #1f2937;">${escapeHtml(durationText)}</td>
+                  <td style="padding:8px 12px;border-bottom:1px solid #1f2937;">${escapeHtml(formatDateTime(row.started_at))}</td>
+                  <td style="padding:8px 12px;border-bottom:1px solid #1f2937;">${escapeHtml(formatDateTime(row.ended_at))}</td>
+                </tr>
+              `;
+            })
+            .join('');
+
+          historyPanel.innerHTML = `
+            <div style="overflow:auto;">
+              <table style="width:100%;border-collapse:collapse;min-width:640px;">
+                <thead>
+                  <tr style="background:#111827;">
+                    <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #1f2937;">序号</th>
+                    <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #1f2937;">科目</th>
+                    <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #1f2937;">套卷</th>
+                    <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #1f2937;">成绩</th>
+                    <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #1f2937;">耗时</th>
+                    <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #1f2937;">开始时间</th>
+                    <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #1f2937;">结束时间</th>
+                  </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>
+          `;
+        } catch (err) {
+          console.error('加载成绩记录失败：', err);
+          historyPanel.innerHTML = `<div class="small" style="color:#f87171">加载失败：${escapeHtml(err.message || '未知错误')}</div>`;
+        } finally {
+          viewHistoryBtn.disabled = false;
+        }
+      };
+
 
       async function onLoadClick() {
         const btn = document.getElementById('load');
@@ -238,38 +528,12 @@
           const s = await fetch(`${activeSet.file}?v=1`, { cache: 'no-store' });
           if (!s.ok) throw new Error(`套卷文件加载失败：HTTP ${s.status}（${activeSet.file}）`);
           const data = await s.json();
-
-          questions = Array.isArray(data.questions) ? data.questions : [];
-          if (!questions.length) throw new Error('套卷文件中 questions 为空');
-
-          document.getElementById('currentSet').textContent =
-            `当前套卷：${activeSet.title}（共 ${activeSet.count ?? questions.length} 题）`;
-
-          renderQuiz();
-          setStatus(`✅ 已加载：${activeSet.title}（${questions.length} 题）`);
-        } catch (e) {
-          console.error(e);
-          setStatus('❌ ' + e.message);
-          alert('加载失败：' + e.message + '\n\n请确认路径是否与仓库一致，大小写是否一致。');
-        } finally {
-          btn.disabled = false;
-          btn.classList.remove('is-loading');
-          btn.textContent = '加载整套';
-        }
-      }
-      function renderQuiz() {
-        const quiz = document.getElementById('quiz');
-        quiz.innerHTML = questions
-          .map((it, idx) => {
-            const name = `q${idx}`;
-            const choices = it.choices
-              .map(
                 (t, i) => `
           <label style="display:block;margin:6px 0;">
             <input type="radio" name="${name}" value="${i}"> ${String.fromCharCode(65 + i)}. ${t}
           </label>
         `
-              )
+              
               .join('');
             return `
 
@@ -278,7 +542,7 @@
             <div>${choices}</div>
             <div id="exp-${idx}" class="small" style="display:none;margin-top:8px;"></div>
           </div>`;
-        })
+        }
           .join('');
 
         wrongList = [];
@@ -289,6 +553,11 @@
         toggleWrongBtn.style.display = 'none';
         toggleWrongBtn.textContent = '只看错题';
         document.getElementById('exportWrong').style.display = 'none';
+        const exportFullBtn = document.getElementById('exportFull');
+        if (exportFullBtn) {
+          exportFullBtn.style.display = questions.length ? 'inline-block' : 'none';
+          exportFullBtn.disabled = false;
+        }
         document.getElementById('submit').disabled = false;
 
         examStartTs = Date.now();
@@ -314,10 +583,6 @@
           const chosen = document.querySelector(`input[name="q${idx}"]:checked`);
           const userAns = chosen ? Number(chosen.value) : -1;
           const exp = document.getElementById(`exp-${idx}`);
-          const ok = userAns === it.answer;
-          if (ok) score++;
-          else wrongList.push({ ...it, user: userAns });
-          exp.style.display = 'block';
           exp.innerHTML = ok
             ? `✅ 正确：${String.fromCharCode(65 + it.answer)}。${it.explanation || ''}`
             : `❌ 你的答案：${userAns >= 0 ? String.fromCharCode(65 + userAns) : '未作答'}；正确：${String.fromCharCode(65 + it.answer)}。${
@@ -343,7 +608,7 @@
 
         const payload = {
           module: document.getElementById('module').value,
-          
+
           set_id: activeSet?.id || 'set',
           title: activeSet?.title || '',
           score: lastScore,
@@ -354,6 +619,9 @@
         };
         const { error } = await supabase.from('results').insert({ user_id: user.id, ...payload });
         if (error) console.error('保存成绩失败：', error);
+
+        historyLoaded = false;
+        if (historyVisible) refreshHistory(true);
       }
 
       document.getElementById('submit').addEventListener('click', () => submitQuiz(false));
@@ -368,188 +636,134 @@
         document.getElementById('toggleWrong').textContent = onlyWrong ? '显示全部' : '只看错题';
       });
 
-      document.getElementById('exportWrong').addEventListener('click', async () => {
-        const btn = document.getElementById('exportWrong');
+      viewHistoryBtn?.addEventListener('click', async () => {
+        historyVisible = !historyVisible;
+        if (historyPanel) {
+          historyPanel.style.display = historyVisible ? 'block' : 'none';
+        }
+        if (viewHistoryBtn) {
+          viewHistoryBtn.textContent = historyVisible ? '收起成绩记录' : '查看成绩记录';
+        }
+        if (historyVisible) {
+          await refreshHistory();
+        }
+      });
+
+      const exportWrongBtn = document.getElementById('exportWrong');
+      exportWrongBtn?.addEventListener('click', async () => {
+        const btn = exportWrongBtn;
+        if (!btn) return;
         const originalText = btn.textContent;
         btn.disabled = true;
         btn.textContent = '正在导出…';
 
         try {
-          const doc = new jsPDF({ unit: 'pt', format: 'a4' });
-          const margin = 48;
-          const pageWidth = doc.internal.pageSize.getWidth();
-          const pageHeight = doc.internal.pageSize.getHeight();
-          const printableWidth = pageWidth - margin * 2;
-          const pxPerPt = 96 / 72;
-          let y = margin;
-          const baseLineHeight = 18;
-          let fontReady = true;
-
-          try {
-            await ensurePdfFont(doc);
-          } catch (err) {
-            fontReady = false;
-            console.error('PDF 字体加载失败：', err);
-            alert(
-              err?.message
-                ? `字体加载失败：${err.message}\n将使用备用方案导出，内容会以图片嵌入，仍可正常阅读。`
-                : '字体加载失败，将使用备用方案导出，内容会以图片嵌入，仍可正常阅读。'
-            );
-            doc.setFont('helvetica', 'normal');
-          }
-
-          doc.setTextColor(20);
-
-          const fallbackCanvas = document.createElement('canvas');
-          const fallbackCtx = fallbackCanvas.getContext('2d');
-
-          const ensureSpace = (needed) => {
-            if (y + needed > pageHeight - margin) {
-              doc.addPage();
-              y = margin;
-            }
-          };
-
-          const wrapFallbackText = (text, fontSize) => {
-            fallbackCtx.font = `${fontSize}px sans-serif`;
-            const maxWidthPx = printableWidth * pxPerPt;
-            const lines = [];
-            let current = '';
-            let lastBreak = -1;
-
-            for (let i = 0; i < text.length; i++) {
-              const ch = text[i];
-              const tentative = current + ch;
-              const width = fallbackCtx.measureText(tentative).width;
-              const breakable = /\s/.test(ch) || /[，。,、；；！？]/.test(ch);
-
-              if (width > maxWidthPx && current) {
-                if (lastBreak > 0) {
-                  const line = current.slice(0, lastBreak);
-                  lines.push(line.trimEnd());
-                  current = current.slice(lastBreak).trimStart() + ch;
-                } else {
-                  lines.push(current.trimEnd());
-                  current = ch;
-                }
-                lastBreak = -1;
-                continue;
-              }
-
-              current = tentative;
-              if (breakable) {
-                lastBreak = current.length;
-              }
-            }
-
-            if (current) {
-              lines.push(current.trimEnd());
-            }
-
-            return lines.length ? lines : [''];
-          };
-
-          const renderLineAsImage = (line, fontSize) => {
-            fallbackCtx.font = `${fontSize}px sans-serif`;
-            const ratio = window.devicePixelRatio || 1;
-            const textWidthPx = Math.max(1, fallbackCtx.measureText(line).width);
-            const textHeightPx = fontSize * 1.35;
-            fallbackCanvas.width = Math.ceil((textWidthPx + 6) * ratio);
-            fallbackCanvas.height = Math.ceil((textHeightPx + 6) * ratio);
-
-            fallbackCtx.save();
-            fallbackCtx.scale(ratio, ratio);
-            fallbackCtx.clearRect(0, 0, fallbackCanvas.width, fallbackCanvas.height);
-            fallbackCtx.font = `${fontSize}px sans-serif`;
-            fallbackCtx.fillStyle = '#141414';
-            fallbackCtx.textBaseline = 'top';
-            fallbackCtx.fillText(line, 3, 3);
-            fallbackCtx.restore();
-
-            return {
-              dataUrl: fallbackCanvas.toDataURL('image/png'),
-              widthPt: (textWidthPx + 6) / pxPerPt,
-              heightPt: (textHeightPx + 6) / pxPerPt
-            };
-          };
-
-          const addParagraph = (text, options = {}) => {
-            const { fontSize = 12, gap = baseLineHeight } = options;
-            const effectiveGap = Math.max(gap, fontSize * 1.45);
-            const content = String(text ?? '');
-            const pieces = content.split(/\r?\n/);
-
-            pieces.forEach((part, partIdx) => {
-              const lines = fontReady
-                ? (() => {
-                    doc.setFontSize(fontSize);
-                    doc.setFont(PDF_FONT_NAME, 'normal', PDF_FONT_ENCODING);
-                    return doc.splitTextToSize(part, printableWidth);
-                  })()
-                : wrapFallbackText(part, fontSize);
-
-              const outputLines = lines.length ? lines : [''];
-
-              outputLines.forEach((line) => {
-                if (fontReady) {
-                  ensureSpace(effectiveGap);
-                  doc.setFontSize(fontSize);
-                  doc.setFont(PDF_FONT_NAME, 'normal', PDF_FONT_ENCODING);
-                  doc.text(line, margin, y + fontSize * 0.85);
-                  y += effectiveGap;
-                } else {
-                  const { dataUrl, widthPt, heightPt } = renderLineAsImage(line, fontSize);
-                  const lineSpacing = Math.max(effectiveGap, heightPt);
-                  ensureSpace(lineSpacing);
-                  doc.addImage(dataUrl, 'PNG', margin, y, widthPt, heightPt);
-                  y += lineSpacing;
-                }
-              });
-
-              if (partIdx < pieces.length - 1) {
-                ensureSpace(effectiveGap);
-                y += effectiveGap;
-              }
-            });
-          };
+          const ctx = await createPdfContext();
+          notifyFontFallback(ctx.getFontError());
 
           const examTitle = activeSet?.title || 'ASVAB 模拟题';
           const examDate = examEndTs ? new Date(examEndTs) : new Date();
-          addParagraph(`错题报告 - ${examTitle}`, { fontSize: 18, gap: 26 });
-          addParagraph(`学员姓名：${studentName}`, { fontSize: 14 });
-          addParagraph(`考试日期：${examDate.toLocaleDateString()} ${examDate.toLocaleTimeString()}`, { fontSize: 14 });
-          addParagraph(`考试成绩：${lastScore}/${questions.length}`, { fontSize: 14, gap: 22 });
+          ctx.addParagraph(`错题报告 - ${examTitle}`, { fontSize: 18, gap: 26 });
+          ctx.addParagraph(`学员姓名：${studentName}`, { fontSize: 14 });
+          ctx.addParagraph(`考试日期：${examDate.toLocaleDateString()} ${examDate.toLocaleTimeString()}`, { fontSize: 14 });
+          ctx.addParagraph(`考试成绩：${lastScore}/${questions.length}`, { fontSize: 14, gap: 22 });
 
           if (!wrongList.length) {
-            addParagraph('恭喜，本次全部答对，没有错题记录。');
+            ctx.addParagraph('恭喜，本次全部答对，没有错题记录。');
           } else {
             wrongList.forEach((w, idx) => {
               const correct = String.fromCharCode(65 + (w.answer ?? 0));
               const userAns = w.user != null && w.user >= 0 ? String.fromCharCode(65 + w.user) : '未作答';
-              addParagraph(`${idx + 1}. ${w.q}`, { fontSize: 13, gap: 20 });
-              addParagraph(`正确答案：${correct}    我的答案：${userAns}`, { fontSize: 12 });
+              ctx.addParagraph(`${idx + 1}. ${w.q}`, { fontSize: 13, gap: 20 });
+              ctx.addParagraph(`正确答案：${correct}    我的答案：${userAns}`, { fontSize: 12 });
               if (w.explanation) {
-                addParagraph(`解析：${w.explanation}`, { fontSize: 12 });
+                ctx.addParagraph(`解析：${w.explanation}`, { fontSize: 12 });
               }
               if (Array.isArray(w.choices) && w.choices.length) {
                 w.choices.forEach((choice, cIdx) => {
                   const label = String.fromCharCode(65 + cIdx);
-                  addParagraph(`${label}. ${choice}`, { fontSize: 11, gap: 16 });
+                  ctx.addParagraph(`${label}. ${choice}`, { fontSize: 11, gap: 16 });
                 });
               }
-              y += 6;
+              ctx.addSpacer(6);
             });
           }
 
           const fileDate = examDate.toISOString().slice(0, 10);
-          doc.save(`ASVAB_${activeSet?.id || 'set'}_错题_${fileDate}.pdf`);
+          ctx.save(`ASVAB_${activeSet?.id || 'set'}_错题_${fileDate}.pdf`);
         } catch (err) {
           console.error('导出错题 PDF 失败：', err);
-          alert('导出错题 PDF 失败：' + err.message);
+          alert('导出错题 PDF 失败：' + (err.message || err.toString()));
         } finally {
           btn.disabled = false;
           btn.textContent = originalText;
         }
+      });
+
+      const exportFullBtn = document.getElementById('exportFull');
+      exportFullBtn?.addEventListener('click', async () => {
+        if (!questions.length) {
+          alert('请先加载题目。');
+          return;
+        }
+        const btn = exportFullBtn;
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = '正在导出…';
+
+        try {
+          const ctx = await createPdfContext();
+          notifyFontFallback(ctx.getFontError());
+
+          const moduleCode = activeSet?.module || document.getElementById('module')?.value || '';
+          const moduleLabel = moduleNameMap[moduleCode] || moduleCode || '科目';
+          const examTitle = activeSet?.title || 'ASVAB 模拟题';
+          const now = new Date();
+          ctx.addParagraph(`ASVAB 模拟题 - ${examTitle}`, { fontSize: 18, gap: 26 });
+          ctx.addParagraph(`科目：${moduleLabel}`, { fontSize: 14 });
+          ctx.addParagraph(`题量：${questions.length} 题`, { fontSize: 14 });
+          ctx.addParagraph(`导出时间：${now.toLocaleDateString()} ${now.toLocaleTimeString()}`, { fontSize: 14 });
+          ctx.addParagraph(`学员姓名：${studentName}`, { fontSize: 14, gap: 22 });
+
+          questions.forEach((q, idx) => {
+            ctx.addParagraph(`${idx + 1}. ${q.q}`, { fontSize: 13, gap: 20 });
+            if (Array.isArray(q.choices)) {
+              q.choices.forEach((choice, cIdx) => {
+                const label = String.fromCharCode(65 + cIdx);
+                ctx.addParagraph(`${label}. ${choice}`, { fontSize: 12, gap: 16 });
+              });
+            }
+            ctx.addSpacer(8);
+          });
+
+          ctx.addParagraph('答案与解析', { fontSize: 16, gap: 26 });
+          questions.forEach((q, idx) => {
+            const correct = String.fromCharCode(65 + (q.answer ?? 0));
+            const explanationText = q.explanation ? `\n解析：${q.explanation}` : '';
+            ctx.addParagraph(`[${idx + 1}] 正确答案：${correct}${explanationText}`, { fontSize: 12, gap: 18 });
+          });
+
+          const fileDate = now.toISOString().slice(0, 10);
+          ctx.save(`ASVAB_${activeSet?.id || 'set'}_整套_${fileDate}.pdf`);
+        } catch (err) {
+          console.error('导出整套 PDF 失败：', err);
+          alert('导出整套 PDF 失败：' + (err.message || err.toString()));
+        } finally {
+          btn.disabled = false;
+          btn.textContent = originalText;
+        }
+      });
+
+      document.getElementById('scrollTop')?.addEventListener('click', () => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+
+      document.getElementById('scrollBottom')?.addEventListener('click', () => {
+        const bodyHeight = Math.max(
+          document.documentElement?.scrollHeight || 0,
+          document.body?.scrollHeight || 0
+        );
+        window.scrollTo({ top: bodyHeight, behavior: 'smooth' });
       });
 
       document.getElementById('load').onclick = onLoadClick;

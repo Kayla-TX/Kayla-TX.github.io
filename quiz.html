@@ -528,45 +528,113 @@
           const s = await fetch(`${activeSet.file}?v=1`, { cache: 'no-store' });
           if (!s.ok) throw new Error(`套卷文件加载失败：HTTP ${s.status}（${activeSet.file}）`);
           const data = await s.json();
-                (t, i) => `
-          <label style="display:block;margin:6px 0;">
-            <input type="radio" name="${name}" value="${i}"> ${String.fromCharCode(65 + i)}. ${t}
-          </label>
-        `
-              
-              .join('');
-            return `
+          if (!data || !Array.isArray(data.questions) || !data.questions.length) {
+            throw new Error('套卷数据格式不正确或题目为空');
+          }
 
+          questions = data.questions.map((item) => {
+            const qText = item.q || item.question || '';
+            const choices = Array.isArray(item.choices)
+              ? item.choices
+              : Array.isArray(item.options)
+              ? item.options
+              : Array.isArray(item.c)
+              ? item.c
+              : [];
+            if (!choices.length) {
+              throw new Error('题目缺少选项，请联系管理员检查题库。');
+            }
+            const answer =
+              typeof item.answer === 'number'
+                ? item.answer
+                : typeof item.a === 'number'
+                ? item.a
+                : 0;
+            return {
+              q: qText,
+              choices,
+              answer,
+              explanation: item.explanation || item.e || ''
+            };
+          });
+
+          const quizEl = document.getElementById('quiz');
+          if (!quizEl) {
+            throw new Error('页面缺少题目容器');
+          }
+          const html = questions
+            .map((it, idx) => {
+              const name = `q${idx}`;
+              const choices = it.choices
+                .map(
+                  (t, i) => `
+          <label style="display:block;margin:6px 0;">
+            <input type="radio" name="${name}" value="${i}"> ${String.fromCharCode(65 + i)}. ${escapeHtml(t)}
+          </label>`
+                )
+                .join('');
+              return `
           <div class="card" data-idx="${idx}">
-            <div style="font-weight:600;margin-bottom:6px;">${idx + 1}. ${it.q}</div>
+            <div style="font-weight:600;margin-bottom:6px;">${idx + 1}. ${escapeHtml(it.q)}</div>
             <div>${choices}</div>
             <div id="exp-${idx}" class="small" style="display:none;margin-top:8px;"></div>
           </div>`;
+            })
+            .join('');
+          quizEl.innerHTML = html;
+
+          const currentSetEl = document.getElementById('currentSet');
+          if (currentSetEl) {
+            currentSetEl.textContent = `当前套卷：${activeSet.title || activeSet.id || ''}`;
+          }
+
+          setStatus(`成功加载套卷：${activeSet.title || activeSet.id || ''}（共 ${questions.length} 题）`);
+
+          wrongList = [];
+          onlyWrong = false;
+          document.getElementById('actions').style.display = 'flex';
+          document.getElementById('result').style.display = 'none';
+          const toggleWrongBtn = document.getElementById('toggleWrong');
+          toggleWrongBtn.style.display = 'none';
+          toggleWrongBtn.textContent = '只看错题';
+          document.getElementById('exportWrong').style.display = 'none';
+          const exportFullBtn = document.getElementById('exportFull');
+          if (exportFullBtn) {
+            exportFullBtn.style.display = questions.length ? 'inline-block' : 'none';
+            exportFullBtn.disabled = false;
+          }
+          document.getElementById('submit').disabled = false;
+
+          examStartTs = Date.now();
+          examEndTs = null;
+          lastScore = 0;
+          hasSubmitted = false;
+
+          const limit = activeSet?.timeLimitMinutes ?? DEFAULT_TIME_LIMIT_MINUTES;
+          startTimer(limit);
+        } catch (err) {
+          console.error('加载套卷失败：', err);
+          const message = err?.message || String(err);
+          setStatus(`❌ 加载失败：${message}`);
+          alert(`加载套卷失败：${message}`);
+          questions = [];
+          wrongList = [];
+          onlyWrong = false;
+          const quizEl = document.getElementById('quiz');
+          if (quizEl) {
+            quizEl.innerHTML = '';
+          }
+          const currentSetEl = document.getElementById('currentSet');
+          if (currentSetEl) {
+            currentSetEl.textContent = '';
+          }
+          document.getElementById('actions').style.display = 'none';
+          document.getElementById('result').style.display = 'none';
+        } finally {
+          btn.disabled = false;
+          btn.classList.remove('is-loading');
+          btn.textContent = originalText;
         }
-          .join('');
-
-        wrongList = [];
-        onlyWrong = false;
-        document.getElementById('actions').style.display = 'flex';
-        document.getElementById('result').style.display = 'none';
-        const toggleWrongBtn = document.getElementById('toggleWrong');
-        toggleWrongBtn.style.display = 'none';
-        toggleWrongBtn.textContent = '只看错题';
-        document.getElementById('exportWrong').style.display = 'none';
-        const exportFullBtn = document.getElementById('exportFull');
-        if (exportFullBtn) {
-          exportFullBtn.style.display = questions.length ? 'inline-block' : 'none';
-          exportFullBtn.disabled = false;
-        }
-        document.getElementById('submit').disabled = false;
-
-        examStartTs = Date.now();
-        examEndTs = null;
-        lastScore = 0;
-        hasSubmitted = false;
-
-        const limit = activeSet?.timeLimitMinutes ?? DEFAULT_TIME_LIMIT_MINUTES;
-        startTimer(limit);
       }
 
       async function submitQuiz(auto = false) {
@@ -582,12 +650,21 @@
         questions.forEach((it, idx) => {
           const chosen = document.querySelector(`input[name="q${idx}"]:checked`);
           const userAns = chosen ? Number(chosen.value) : -1;
+          const ok = userAns === it.answer;
+          if (ok) {
+            score += 1;
+          } else {
+            wrongList.push({ ...it, user: userAns });
+          }
           const exp = document.getElementById(`exp-${idx}`);
-          exp.innerHTML = ok
-            ? `✅ 正确：${String.fromCharCode(65 + it.answer)}。${it.explanation || ''}`
-            : `❌ 你的答案：${userAns >= 0 ? String.fromCharCode(65 + userAns) : '未作答'}；正确：${String.fromCharCode(65 + it.answer)}。${
-                it.explanation || ''
-              }`;
+          if (exp) {
+            const correctLetter = String.fromCharCode(65 + (it.answer ?? 0));
+            const userLetter = userAns >= 0 ? String.fromCharCode(65 + userAns) : '未作答';
+            exp.style.display = 'block';
+            exp.innerHTML = ok
+              ? `✅ 正确：${correctLetter}。${escapeHtml(it.explanation || '')}`
+              : `❌ 你的答案：${userLetter}；正确：${correctLetter}。${escapeHtml(it.explanation || '')}`;
+          }
         });
 
         const r = document.getElementById('result');
@@ -613,6 +690,7 @@
           title: activeSet?.title || '',
           score: lastScore,
           total: questions.length,
+
           started_at: new Date(examStartTs).toISOString(),
           ended_at: new Date(examEndTs).toISOString(),
           duration_sec: durationSec
